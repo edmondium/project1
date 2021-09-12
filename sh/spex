@@ -1,0 +1,51 @@
+#!/bin/sh
+
+# SPEX application launcher
+
+[ "$1" = '---0' ] && { n=0 ; shift 1 ; }
+
+spex_exe="$(dirname $0)/spex$n.inv"
+
+if [ ! -x $spex_exe ]; then
+  echo "Spex executable not found: $spex_exe" > /dev/stderr
+  spex_exe="$(dirname $0)/spex$n.noinv"
+  if [ ! -x $spex_exe ]; then
+    echo "Spex executable not found: $spex_exe" > /dev/stderr
+    exit 1
+  fi
+fi
+
+if [ "$1" = "-h" -o "$1" = "--help" -o "$1" = "-v" -o "$1" = "--version" -o "$1" = "-x" ]; then
+  exec $spex_exe $@
+  exit
+fi
+
+flags=`$spex_exe -x | grep "invs="`
+
+if [ $? != 0 -o ! "$flags" ]; then
+  {
+  echo
+  echo "Spex (-x) could not determine DFT flags. See above for the error message."
+  echo "Possible causes:"
+  echo "1. Spex did not run (e.g., because of missing library)."
+  echo "2. Spex executable ($spex_exe) is not compiled for your DFT program." 
+  echo "3. Current directory does not hold DFT data."
+  } >> /dev/stderr
+  exit 1
+fi
+
+l_soc=`expr "$flags" : ".*\(l_soc=T\)"`
+invs=`expr "$flags" : ".*\(invs=T\)"`
+
+if [ "$invs" -a ! "$l_soc" ]; then
+  spex_exe="$(dirname $0)/spex$n.inv"
+else
+  spex_exe="$(dirname $0)/spex$n.noinv"
+fi
+
+if [ ! -x $spex_exe ]; then
+  echo "Spex executable not found: $spex_exe" >> /dev/stderr
+  exit 1
+fi
+
+exec $spex_exe $@

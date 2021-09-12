@@ -1,0 +1,28 @@
+      interface
+      subroutine selfenergy(job1,ikpt,evalx,evalc,n,nfreqw,freqw,coul,Win(ctrafo),Win(screen), head, wing,
+      &                                                                            Win(screenw),headw,wingw,plasma)
+      
+      use global
+      use wrapper
+      use freq_integral
+      use read_write, only: edeg
+      use file
+      Mpi ( use Mwrapper )
+      Mpi ( use key )
+      Mpi2( use, intrinsic :: iso_c_binding )
+      Load( use util )
+      
+      implicit none
+      type(jobtype), intent(in)           :: job1
+      integer,       intent(in)           :: n,nfreqw,ikpt
+      logical,       intent(in)           :: evalx,evalc
+      real(8),       intent(in), optional :: coul(n)
+      complex(8),    intent(in), optional :: headw(3,3,nfreqw),wingw(3,n,2,nfreqw)
+      MCOMPLEX(8),   intent(in), optional :: head(6,nfreq),wing(3,n,nfreq)
+      MCOMPLEX(8)                optional :: ctrafo(nbasm(ikpt),n)
+      MCOMPLEX(8)                optional :: screen(n*(n+1)/2,nfreq)
+      complex(8)                 optional :: screenw(n,n,nfreqw)
+      real(8)                    optional :: plasma
+      real(8),       intent(in), optional :: freqw(nfreqw)
+      end subroutine selfenergy
+      end interface

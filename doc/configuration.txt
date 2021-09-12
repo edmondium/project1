@@ -1,0 +1,12 @@
+MPIFC=mpifort ./configure --prefix=$HOME --enable-mpi=yes --with-wan=yes --with-hdf5=/usr/lib/x86_64-linux-gnu/hdf5/mpich
+
+1. libblas-dev
+2. liblapack-dev
+3. libscalapack-mpich-dev
+4. libfftw3-dev
+5. libhdf5-mpich-dev
+6. libwannier90-dev
+7. libopenmpi-dev
+8. mpich
+
+mpifort -O2 -ffixed-line-length-none -cpp -I/usr/lib/x86_64-linux-gnu/hdf5/mpich/include -DnoMSYNC -DCPPTRAD  -DMPI -DWAN -DWANv2 -c -o selfenergy.o selfenergy.f

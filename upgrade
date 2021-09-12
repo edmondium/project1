@@ -1,0 +1,97 @@
+#!/bin/sh
+
+dir0="$(pwd)"
+log="$dir0"/upgrade.log
+rm -f "$log"
+
+error(){
+  echo "ERROR"
+  echo
+  echo "See upgrade.log for more details."
+  exit 1
+}
+
+if test "$1" = "--help"; then
+  echo "Usage: upgrade [OPTIONS]"
+  echo "       --check  only check for new version"
+  echo "       --help   print this help"  
+  exit 0
+elif test "$1" = "--check"; then
+  check="true"
+elif test "$1"; then
+  echo "Unknown option: $1"
+  exit
+else
+  echo "-------------------------------------------------"
+  echo "I will try to upgrade to the latest Spex version."
+  echo "-------------------------------------------------"
+  printf "Checking for last configure command ... "
+  if args="$(./config.status --config 2> "$log")"; then
+    echo "OK"
+  else
+    error
+  fi
+fi
+
+printf "Checking if wget is available ...       "
+if command -v wget > "$log" 2>&1 ; then
+  echo "OK"
+else
+  echo "wget not available." >> "$log"
+  error
+fi
+
+printf "Checking for installed version ...      "
+version0="$(expr "$(head -1 src/version.h 2>> "$log")" : '# define VERSION "\(.*\)"' 2>> "$log")" || { error ; }
+echo "$version0"
+
+printf "Checking for latest version ...         "
+mkdir -p .upgrade 2>> "$log" || { error ; }
+cd .upgrade
+rm -f version.h
+wget https://iffcloud.fz-juelich.de/s/iyKY8bXY4x3YNR4/download/version.h >> "$log" 2>&1 || { error ; }
+version="$(expr "$(head -1 version.h)" : '# define VERSION "\(.*\)"' 2>> "$log")" || { error ; }
+echo "$version"
+
+test "$version" = "$version0" && { echo ; echo "Installed version is up-to-date." ; exit 0 ; }
+
+if test "$check"; then
+  echo
+  echo 'New version available. Type "./upgrade" to upgrade.'
+  exit 0
+fi
+
+printf "Downloading latest version ...          "
+rm -f spex_current.tgz
+wget https://iffcloud.fz-juelich.de/s/aerQXL5NKqzzMfg/download/spex_current.tgz >> "$log" 2>&1 || { error ; }
+echo "OK"
+
+dir=$(pwd)
+cd ../..
+
+printf "Preparing to unpack archive ...         "
+test -w ..           || { echo "Parent directory (..) not writable."       >> "$log" ; error ; }
+test -d spex$version && { echo "Directory ../spex$version already exists." >> "$log" ; error ; }
+echo "OK"
+
+printf "Unpacking archive ...                   "
+tar xvzf $dir/spex_current.tgz >> "$log" 2>&1 || { error ; }
+echo "OK"
+
+printf "Changing directory into spex%s ...   " "$version"
+cd spex$version >> "$log" 2>&1 || { error ; }
+echo "OK"
+
+printf "Running configure of new version ...    "
+eval ./configure $args >> "$log" 2>&1 || { error ; }
+echo "OK"
+
+printf "Compiling new version ...               "
+make >> "$log" 2>&1 || { error ; }
+echo "OK"
+
+cd "$dir0"
+
+echo
+echo "Spex has been upgraded to version $version."
+echo "Change to "'"'"../spex$version"'"'" and type "'"'"make install"'"'" to install executables."

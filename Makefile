@@ -1,0 +1,134 @@
+#########################
+### Makefile for SPEX ###
+#########################
+#
+# make i   / iclean   - inversion
+# make n   / nclean   - noinversion
+# make     / clean    - all
+# make si  / siclean  - serial inversion
+# make sn  / snclean  - serial noinversion
+# make s   / sclean   - serial all
+# make all / allclean - all above
+# make ext            - extras
+# make iff_sync       - sync from IFF directory
+# make prepare        - creates directories noinv, serial, and serial/noinv containing the corresponding object files
+# make install        - installs into PREFIX/bin
+#
+# Imports "Makefile.def" if it exists. The following macros can be defined.
+# DFT        = suffix for DFT program           (e.g., "_fleur")
+# ADDFLAGS   = flags to be added                (optional)
+# MKFLAGS    = flags to give to make            (optional)
+# PREREQ     = iff_sync                         (only if synchronization with IFF directory is needed)
+# HOST_IFF   = IFF hostname                     ( -- " -- )
+# USER_IFF   = IFF username                     ( -- " -- )
+# DIR_IFF    = IFF directory holding Spex code  ( -- " -- )
+# PREFIX     = executables are installed in PREFIX/bin
+#
+# Use 'make ADD=xxx' and 'make REM=xxx' to add or remove options temporarily.
+
+PREFIX = /home/edmondium
+MODE   = user
+
+-include Makefile.def
+
+ifeq ($(MODE),user)
+  default: warn_def
+	@$(MAKE) i n 
+	@$(MAKE) spex.extr
+	@echo
+	@echo "The executables are in ./src"
+	@echo "Type 'make install' to install them into "$(PREFIX)/bin
+else
+  default: warn_def
+	@$(MAKE) githash
+	@$(MAKE) i n
+	@$(MAKE) spex.extr
+endif
+
+i: $(PREREQ)
+	$(MAKE) $(MKFLAGS) -C src ADD0=-DINV EXEC=spex.inv
+
+n: $(PREREQ)
+	$(MAKE) $(MKFLAGS) -C src/noinv EXEC=../spex.noinv
+
+s: si sn
+
+si: $(PREREQ)
+	$(MAKE) $(MKFLAGS) -C src/serial REM0=-DMPI ADD0=-DINV EXEC=../spex0.inv
+
+sn: $(PREREQ)
+	$(MAKE) $(MKFLAGS) -C src/serial/noinv REM0=-DMPI EXEC=../../spex0.noinv
+
+all: default s
+
+spex.extr: $(PREREQ)
+	$(MAKE) $(MKFLAGS) spex.extr -C src
+
+clean: iclean nclean
+
+iclean:
+	$(MAKE) $(MKFLAGS) clean -C src EXEC=spex.inv
+
+nclean: 
+	$(MAKE) $(MKFLAGS) clean -C src/noinv EXEC=../spex.noinv
+
+sclean: siclean snclean
+
+siclean:
+	$(MAKE) $(MKFLAGS) clean -C src/serial EXEC=../spex0.inv
+
+snclean:	
+	$(MAKE) $(MKFLAGS) clean -C src/serial/noinv EXEC=../../spex0.noinv
+
+xclean:
+	@$(MAKE) $(MKFLAGS) xclean -C src
+
+allclean: xclean clean sclean
+
+warn_def:
+	@test -f Makefile.def && echo '"Makefile.def" is included.' || true
+
+iff_sync:
+	@echo ; echo '#### IFF sync ####'
+	@rsync -av '$(USER_IFF)@$(HOST_IFF):$(DIR_IFF)/src/*.f $(DIR_IFF)/src/*.h $(DIR_IFF)/src/*.inc $(DIR_IFF)/src/interface $(DIR_IFF)/src/depend.mk' src
+
+iff_sync_all: iff_sync
+	@echo ; echo '#### IFF sync all ####'
+	@rsync -av '$(USER_IFF)@$(HOST_IFF):$(DIR_IFF)/config $(DIR_IFF)/configure $(DIR_IFF)/Makefile.in' .
+	@rsync -av '$(USER_IFF)@$(HOST_IFF):$(DIR_IFF)/src/Makefile.in $(DIR_IFF)/src/prep_depend.sh $(DIR_IFF)/src/prep_interface.sh' src
+	@rsync -av '$(USER_IFF)@$(HOST_IFF):$(DIR_IFF)/sh/spex.band $(DIR_IFF)/sh/spex.selfc $(DIR_IFF)/sh/spex $(DIR_IFF)/sh/spex.setkey $(DIR_IFF)/sh/spex.execs' sh
+
+depend:
+	$(MAKE) $(MKFLAGS) -C src ADD0="-DWAN -DMPI" depend
+
+interface:
+	$(MAKE) $(MKFLAGS) -C src ADD0="-DWAN -DMPI" interface
+
+githash:
+	@if git rev-parse &> /dev/null; then echo '# define GITHASH "'`git rev-parse --short HEAD``git diff --quiet || echo '/mod'`'"' > src/make.h ; else echo 'Not a GIT repository; "src/make.h" not updated.' ; fi
+
+tgz:
+	$(MAKE) $(MKFLAGS) -C src ADD0="-DWAN -DMPI" tgz
+
+install: warn_def
+	@test -f src/spex.inv   || { echo 'File src/spex.inv missing. Source not compiled yet. Please run "make" first!'   ; exit 1 ; }
+	@test -f src/spex.noinv || { echo 'File src/spex.noinv missing. Source not compiled yet. Please run "make" first!' ; exit 1 ; }
+	@test -d $(PREFIX)      || { echo 'Installation directory '$(PREFIX)' missing. Create it or provide different directory!' ; exit 1 ; }	
+	@test -w $(PREFIX)      || { echo 'Installation directory '$(PREFIX)' exists but cannot be modifed. Change permissions or provide different directory!' ; exit 1 ; }
+	@test -f $(PREFIX)/bin/spex.inv && { test -w $(PREFIX)/bin/spex.inv || { echo 'File "spex.inv" in installation directory '$(PREFIX)'/bin cannot be overwritten. Change permissions!' ; exit 1 ; } } || true
+	@echo Installation into $(PREFIX)/bin
+	@echo
+	mkdir -p $(PREFIX)/bin
+	cp src/spex.inv   $(wildcard src/spex0.inv) $(PREFIX)/bin
+	cp src/spex.noinv $(wildcard src/spex0.noinv) $(PREFIX)/bin
+	cp src/spex.extr   $(PREFIX)/bin
+	cp sh/spex         $(PREFIX)/bin
+	cp sh/spex.band    $(PREFIX)/bin
+	cp sh/spex.selfc   $(PREFIX)/bin
+	cp sh/spex.execs   $(PREFIX)/bin	
+	cp sh/spex.setkey  $(PREFIX)/bin
+	@echo
+	@echo 'Spex can now be called by "'$(PREFIX)'/bin/spex"'
+	@echo 'or, if "'$(PREFIX)'/bin" is in $$PATH, simply by "spex".'
+
+.PHONY: i n si sn s all spex.extr iclean nclean clean siclean snclean sclean allclean iff_sync iff_sync_all prepare depend interface tgz install

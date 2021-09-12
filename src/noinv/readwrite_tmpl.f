@@ -1,0 +1,1 @@
+../readwrite_tmpl.f

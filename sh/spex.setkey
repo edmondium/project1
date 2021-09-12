@@ -1,0 +1,200 @@
+#!/bin/bash
+
+file=spex.inp
+force=""
+section=""
+
+while [ "${1:0:1}" = "-" ]
+do
+  if [ "$1" == "-f" ]; then
+    force=true
+  elif [ "${1:0:6}" = "--inp=" ]; then
+    file="${1:6}"
+    if [ ! "$file" ]; then
+      echo "Empty file name." >> /dev/stderr
+      exit 1
+    fi
+  elif [ "$1" = "--nosec" ]; then
+    section="nosec"
+  elif [ "${1:0:6}" = "--sec=" ]; then
+    section="${1:6}"
+  elif [ "$1" != "--help" -a "$1" != "--version" ]; then
+    echo "Option $1 unknown." >> /dev/stderr
+  fi
+  shift
+done
+
+keyline="$1"
+shift
+while [ "$1" ]
+do
+  keyline="$keyline $1"
+  shift
+done
+
+key=`expr "$keyline" : ' *\([^ ]*\)'`
+
+if [ "$key" = "--help" -o "$key" = "--version" -o ! "$keyline" -o "$key" = "#" ]; then
+  echo "Usage: spex.setkey [OPTIONS] keyline"
+  echo '  --nosec       : Look for key outside sections.'
+  echo '  --sec=SECTION : Look for key in section SECTION.'
+  echo '  --inp=inpfile : Modify "inpfile" instead of the default "spex.inp".'
+  echo '  -f            : Force removing argument (see below).'
+  echo
+  echo '"inpfile.bak" contains the original inpfile if the command ends successfully, otherwise it contains the modified inpfile up to the point of failure.'
+  echo
+  echo "Examples: "
+  echo '  spex.setkey \#RESTART  :  Comments "RESTART ...". No effect if RESTART is not present. (Note that "#" has to be escaped.)'
+  echo '  spex.setkey RESTART 2  :  Adds "RESTART 2" to the inpfile if RESTART is not present, otherwise the RESTART argument is changed accordingly.'
+  echo '  spex.setkey RESTART    :  Adds "RESTART" to the inpfile if RESTART is not present. Uncomments RESTART if it is commented. No effect if RESTART is present.'
+  echo '  spex.setkey -f RESTART :  Same as previous but removes any argument.'  
+  exit
+fi
+
+if [ "${key:0:1}" = "#" ]; then
+  expr "$keyline" : " *$key$" > /dev/null 2>&1 || { echo "Arguments not allowed after commented key." >> /dev/stderr ; exit 1 ; }
+fi
+
+if [ ! -f "$file" ]; then
+  echo "File $file does not exist."
+  exit 1
+fi
+
+modify=''
+found=''
+look=true
+[ "$section" -a "$section" != "nosec" ] && look=''
+cut=0
+[ "${key:0:1}" == "#" ] || cut=1 # cut=1 cuts comments, cut=2 cuts non-comments (not used)
+
+while true # run two rounds with cut=1 (or 2) and cut=0
+do
+
+{
+while IFS= read -r line
+do
+  
+  # cut leading spaces (->line2)
+  line2=`expr "$line" : ' *\(.*\)'`
+  
+  # cut trailing comment (->line1)
+  line1=`expr "$line2" : '\([^#]*\)#.*$'`  
+  [ ! "$line1" ] && line1="$line2"
+  
+  # cut line (comment or not) according to $cut
+  [ $cut = 1 -a "${line1:0:1}"  = '#' ] && line1=''
+  [ $cut = 2 -a "${line1:0:1}" != '#' ] && line1=''
+  
+  line1="$line1 "
+
+  # section
+  if [ "$section" ]; then
+    look1=$look
+    if expr "$line1" : "SECTION " > /dev/null 2>&1 ; then
+      if [ "$section" = "nosec" ]; then
+        [ "$look" ] || { echo "Double SECTION?" >> /dev/stderr ; exit 1 ; }
+        look=''
+      elif expr "$line1" : "SECTION *$section " > /dev/null 2>&1 ; then
+        [ "$look" ] && { echo "Double SECTION $section?" >> /dev/stderr ; exit 1 ; }
+        look=true
+      fi
+    elif expr "$line1" : "END " > /dev/null 2>&1 ; then
+      if [ "$section" = "nosec" ]; then
+        [ "$look" ] && { echo "Double END?" >> /dev/stderr ; exit 1 ; }
+        look=true
+      elif expr "$line1" : "SECTION *$section " > /dev/null 2>&1 ; then
+        [ "$look" ] || { echo "Double END of section $section?" >> /dev/stderr ; exit 1 ; }
+        look=''
+      fi
+    fi  
+    if [ "$look" != "$look1" ]; then
+      echo "$line"
+      continue
+    fi
+  fi
+  
+  # close section
+  if [ "$section" -a "$look" ]; then
+    expr "$line1" : "END " > /dev/null 2>&1 && look=''
+  fi
+  
+  # modify line
+  if [ "$look" ]; then
+    if [ "${key:0:1}" = "#" ]; then # comment: key -> #key
+      if expr "$line1" : "${key:1} " > /dev/null 2>&1 ; then
+        [ "$found" ] || line=`expr "$line" : '\( *\)'`"#"`expr "$line" : ' *\(.*\)'`        
+	modify=true
+        found=true
+      fi
+    elif expr "$line1" : "# *$key " > /dev/null 2>&1 ; then # uncomment: #key -> key
+      if expr "$keyline" : " *$key$" > /dev/null 2>&1 ; then # no args
+        if [ "$force" ]; then
+	  [ "$found" ] || line=`expr "$line" : '\( *\)#'`"$key"
+	else
+          [ "$found" ] || line=`expr "$line" : '\( *\)#'``expr "$line" : ' *#\(.*\)'`
+	fi
+      else # args
+        [ "$found" ] || line=`expr "$line" : '\( *\)#'`"$keyline"
+      fi
+      found=true
+      modify=true
+    elif expr "$line1" : "$key " > /dev/null 2>&1 ; then # changeargs: key -> key (args)
+      if expr "$keyline" : " *$key$" > /dev/null 2>&1 ; then # noargs
+        if [ "$force" ]; then
+	  if ! expr "$line1" : "$key $" > /dev/null 2>&1 ; then # cutargs: key (args) -> key ()
+	    [ "$found" ] || line=`expr "$line" : '\( *\)'`"$key"
+	    modify=true
+	  fi
+	fi
+      else # args
+        line1_=''
+        for a in $line1
+	do
+	  line1_="$line1_ $a"
+	done
+	keyline_=''
+	for a in $keyline
+	do
+	  keyline_="$keyline_ $a"
+	done
+	if [ "$line1_" != "$keyline_" ]; then
+	  [ "$found" ] || line=`expr "$line" : '\( *\)'`"$keyline"
+	  modify=true
+	fi
+      fi
+      found=true
+    fi
+  fi
+
+  # print line
+  echo "$line"
+
+done
+
+if [ "${key:0:1}" != "#" ]; then
+  if [ ! "$found" -a $cut = 0 ]; then
+    if [ "$section" -a "$section" != "nosec" ]; then
+      [ "$look" ] && { echo "Section not closed?" >> /dev/stderr ; exit 1 ; }
+      echo "SECTION $section"
+      echo "  $keyline"
+      echo "END"
+    else
+      echo "$keyline"    
+    fi
+    modify=.true.
+  fi
+fi
+} < "$file" > "$file.bak"
+
+[ $cut = 0 ] && break
+[ "$found" ] && break
+cut=0
+done
+
+if [ "$modify" ] ; then
+  mv "$file" tmp.$$
+  mv "$file.bak" "$file"
+  mv tmp.$$ "$file.bak"
+else
+  echo "File $file unchanged."
+fi

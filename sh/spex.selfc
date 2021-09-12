@@ -1,0 +1,158 @@
+#!/bin/bash
+
+# Paths to executables (can be set here)
+
+# SPEX_EXEC=
+# DFT_EXEC=
+# SPEX_THRU=
+# DFT_THRU=
+# THRU=
+
+# Help
+
+## ========================================================================
+## Command line
+
+export copy=''
+
+PARAMS=""
+while [ "$1" ]; do
+  case "$1" in
+    -h|--help)
+      echo 'Performs QSGW self-consistent calculations.'
+      echo
+      echo 'Usage: spex.selfc [OPTIONS] N (= number of iterations)'
+      echo
+      echo 'Options:'
+      echo '  -c     : Copy executables to current directory.'
+      echo '  --help : Show this help.'
+      echo
+      echo 'Environment variables:'
+      echo '  $SPEX_EXEC : Spex executable (defaults to "spex")'
+      echo '  $DFT_EXEC  : DFT executable (default depends on DFT code)'
+      echo '  $SPEX_THRU : Command through which Spex should be run, e.g., "mpirun -n 4" (no default)'
+      echo '  $DFT_THRU  : Same for DFT code'
+      echo '  $THRU      : Default definition for $SPEX_THRU and $DFT_THRU (no default)'
+      echo
+      exit
+      ;;
+    -c)
+      export copy=true
+      shift
+      ;;
+    -*|--*=) # unsupported flags
+      echo "Error: Unsupported flag $1" >&2
+      exit 1
+      ;;
+    *) # preserve positional arguments
+      PARAMS="$PARAMS $1"
+      shift
+      ;;
+  esac
+done
+
+niter="$(expr "$1" : '\([0-9]*\)$')"
+if [ ! "$niter" ]; then
+  echo 'Usage: spex.selfc [OPTION] N (= number of iterations)'
+  exit
+fi
+
+## ========================================================================
+## Set executables
+
+if [ ! -f "$(dirname "$0")/spex.execs" ]; then
+  echo 'Script "spex.execs" not found in the directory of "spex.selfc".'
+  exit 1
+fi
+
+. "$(dirname "$0")"/spex.execs
+
+## ========================================================================
+## Make tests!
+
+p="$(grep '^ *WRTKPT' spex.inp)"
+if [ "$p" ]; then
+  echo 'Remove (or comment out) WRTKPT.'
+  exit 1
+fi
+
+p="$(grep '^ *JOB[^#]*FULL IBZ' spex.inp)"
+if [ ! "$p" ]; then
+  echo 'The JOB definition must contain FULL IBZ:(...).'
+  exit 1
+fi
+
+p="$(grep '^ *CONTINUE' spex.inp)"
+if [ ! "$p" ]; then
+  p="$(grep '^ *CONTOUR *{' spex.inp)"
+  if [ ! "$p" ]; then
+    echo 'Section SENERGY must contain either CONTINUE or CONTOUR {...}.'
+    exit 1
+  fi
+fi
+
+## ========================================================================
+## General preparations
+
+if [ $dft = "fleur" ]; then
+  FLEUR_EXEC=$DFT_EXEC
+  FLEUR_THRU=$DFT_THRU  
+else
+  echo "Unknown code: "$dft > /dev/stderr
+  exit 1
+fi
+
+## ========================================================================
+## Iterations:
+## ========================================================================
+
+i=0
+if ls out-gw3-* 1> /dev/null 2>&1; then
+  for file in out-gw3-*
+  do
+    i0="$(expr "$file" : 'out-gw3-\([0-9]*\)')"
+    [ "$i0" -gt "$i" ] && i=$i0
+  done
+fi
+let niter=niter+i
+
+echo
+echo Calculate iterations `expr $i + 1` to $niter ...
+echo
+
+while [  $i -lt $niter ]
+do
+
+let i=i+1
+
+#
+# DFT code runs one-shot calculation on special kpoint set
+
+sed 's/pot8=F/pot8=T/' inp > inp1;sed 's/gw=./gw=2/' inp1 > inp;rm inp1
+$FLEUR_THRU $FLEUR_EXEC > fleur-gw2-$i.out
+[ $? != 0 ] && break
+mv out out-gw2-$i
+echo Fleur gw=2 output written to out-gw2-$i
+
+#
+# SPEX runs GW
+
+$SPEX_THRU $SPEX_EXEC > spex-$i.out
+[ $? != 0 ] && break
+echo Spex output written to spex-$i.out
+
+#
+# Prepare SCF run
+
+rm -f fleur.qsgw broyd*
+
+#
+# DFT code runs SCF cycles
+
+sed 's/pot8=F/pot8=T/' inp > inp1; sed 's/gw=./gw=3/' inp1 > inp; rm -f inp1
+$FLEUR_THRU $FLEUR_EXEC > fleur-gw3-$i.out
+[ $? != 0 ] && break
+mv out out-gw3-$i
+echo Fleur gw=3 output written to fleur-gw3-$i.out
+
+done

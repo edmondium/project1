@@ -1,0 +1,191 @@
+#########################
+### Makefile for SPEX ###
+#########################
+###
+### Compile code:       make
+### Clean up:           make clean
+### Compile spex.extr:  make spex.extr
+### Build dependencies: make depend (automatic if depend.mk does not exist)
+### Build tgz archive:  make tgz
+###
+### Preprocessor macros in FLAGS:
+### -DINV           : Systems with inversion symmetry and without SOC
+### -DWAN           : Build with Wannier90 support
+### -DLOAD          : Load wave functions from harddisc when needed (otherwise stored in memory)
+### -DMPI           : MPI parallel support
+### -DTDDFT         : TDDFT support (currently disabled!)
+### Special macros:
+### -DnoSHARED      : Compile without the use of shared memory (only MPI)
+### -DHDF5ser       : Compile with serial HDF5 library (only MPI)
+### For testing:
+### -DCHECK         : Compiler checks
+### -DCHECK_SENERGY : Show self-energy after each k point
+### -DCHECK_SHARED  : Check MPI3 shared memory feature
+### -DCMP_0405adj   : For comparison with old version 04.05adj
+### -DFIBC          : Include offsite contribution of IBC (for testing)
+### -DWRTMEM        : Gives information of memory usage during execution
+###
+### Use 'make ADD=xxx' and 'make REM=xxx' to add or remove options temporarily.
+###
+
+FLAGS    = @FLAGS@ $(ADD0) $(ADD)
+CHECK    = @CHECK@
+FFLAGS   = @FCFLAGS@
+CPPFLAGS = @CPPFLAGS@
+LDFLAGS  = @LDFLAGS@
+LDLIBS   = @LIBS@
+FC       = @FC@
+DFT      = @DFT@
+MODE     = @MODE@
+EXEC    ?= spex.x
+
+-include Makefile.def
+
+FFLAGS += $(CPPFLAGS)
+FFLAGS += $(ADDFLAGS)
+FFLAGS += $(FLAGS:-DCHECK=-DCHECK $(CHECK))
+
+ifneq ($(REM0),)
+  FFLAGS := $(filter-out $(REM0),$(FFLAGS))
+endif
+
+ifneq ($(REM),)
+  FFLAGS := $(filter-out $(REM),$(FFLAGS))
+endif
+
+SRC = global.f arrays.f util.f wrapper.f file.f key.f readwrite$(DFT).f \
+      fft.f freqintegral.f Hwrapper.f getinput.f selfenergy.f wavefproducts.f \
+      coulombmatrix.f correlation.f wannier.f tetrahedron.f susceptibility.f \
+      iterate.f quasiparticle.f trafo.f numerics.f ibc.f dirac.f \
+      susceptibility_core.f irreps.f mixedbasis.f exchange.f selfenergy_com.f \
+      coulomb_wannier.f dwavefproducts.f overlap.f symmetry.f bandinfo.f dump.f \
+      checkinput.f pade.f susceptibility_wannier.f bethesalpeter.f selfenergy_wannier.f \
+      vector.f divergence.f correlation_wannier.f hilbert.f continuation.f spex.f \
+      timer_util.f gauss.f spectra_wannier.f xc_energy.f checkmem.f
+
+ifeq ($(filter -DMPI,$(sort $(FFLAGS))),-DMPI)
+  SRC += Mwrapper.f Mutil.f
+endif
+
+ifeq ($(filter -DTEST,$(sort $(FFLAGS))),-DTEST)
+  SRC += test.f
+endif
+
+FLEUR_OBJ := $(addprefix $(FLEUR_DIR)/,$(FLEUR_OBJ))
+
+OBJ := $(SRC:%.f=%.o)
+
+MOD := $(shell grep -l "end module" $(SRC))
+
+.f.o:
+	@prep@ $(FC) $(FFLAGS) -c -o $@ $(<:%.f=%@extf@.f)
+
+$(EXEC): $(OBJ)
+	$(FC) $(OBJ) $(FLEUR_OBJ) $(LDFLAGS) $(LDLIBS) -o $(EXEC)
+
+depend: $(SRC)
+	@ sh prep_depend.sh $(sort $(SRC) $(SRC1))
+
+interface: $(SRC)
+	@ sh prep_interface.sh $(sort $(SRC) $(SRC1))
+
+include depend.mk
+
+clean: 
+	-rm -f *.o *.mod $(EXEC)
+
+xclean:
+	-rm -f spex.extr.o spex.extr
+
+key.o:             getkey.inc
+util.o:            util.inc
+trafo.o:           trafo.inc
+wrapper.o:         w_scalapack.inc w_packmat.inc w_unitarytrafo.inc
+readwrite$(DFT).o: readwrite.inc
+
+define simplify
+	cpp -traditional -DCPPTRAD $(CPPFLAGS) $(1) | \
+	sed "/^#/d" | \
+	sed "/^c/d" | \
+	sed "s/\(^      \) */\1/" | \
+	sed "s/\(^     &\) */\1/" | \
+	sed "s/\(^[^!'\'']*\);/\1\n      /" | \
+	sed "s/\(^[^!'\'']*\);/\1\n      /" | \
+	sed "s/\(^[^!'\'']*\);/\1\n      /" | \
+	sed "s/\(^[^!'\'']*\);/\1\n      /" | \
+	sed "s/\(^[^!'\'']*\);/\1\n      /" | \
+	sed "s/\(^[^!'\'']*\);/\1\n      /" | \
+	sed "s/\(^[^!'\'']*\);/\1\n      /" | \
+	sed "s/\(^[^!'\'']*\);/\1\n      /" | \
+	sed "s/\(^[^'\'']*'\''[^'\'']*'\''[^'\'']*\);/\1\n      /" | \
+	sed "s/\(^[^'\'']*'\''[^'\'']*'\''[^'\'']*\);/\1\n      /" | \
+	sed "s/\(^[^'\'']*'\''[^'\'']*'\''[^'\'']*\);/\1\n      /" | \
+	sed "s/\(^[^'\'']*'\''[^'\'']*'\''[^'\'']*\);/\1\n      /" | \
+	sed "s/\(^[^'\'']*'\''[^'\'']*'\''[^'\'']*\);/\1\n      /" | \
+	sed "s/\(^[^'\'']*'\''[^'\'']*'\''[^'\'']*\);/\1\n      /" | \
+	sed "s/\(^[^'\'']*'\''[^'\'']*'\''[^'\'']*\);/\1\n      /" | \
+	sed "s/\(^[^'\'']*'\''[^'\'']*'\''[^'\'']*\);/\1\n      /" | \
+	sed "s/\(^[^!]\{132\}\)\(.\)/\1\n     \&\2/" | \
+	sed "s/\(^[^!]\{132\}\)\(.\)/\1\n     \&\2/" > $(1:%.f=%_simple.f)
+endef
+
+SRC1  = $(wildcard readwrite*.f)
+SRC2  = spex.extr.f
+INC1  = getkey.inc util.inc trafo.inc readwrite.inc w_scalapack.inc w_packmat.inc w_unitarytrafo.inc
+INC   = $(INC1) interface prep_depend.sh prep_interface.sh Makefile.in config.h.in make.h
+MACRO = cppmacro.h version.h jobtype.h restype.h depend.mk
+SH    = spex spex.band spex.selfc spex.execs spex.setkey
+INST  = configure config Makefile.in ChangeLog INSTALL upgrade
+
+tgz:
+	@ sh -c 'echo "Enter version number (or test)"; read aa ; \
+	         a=`expr "$$aa" : "\([^ ]*\)"` ; \
+	         if [ $$a = "test" ]; then \
+		   mv version.h version.bak ; \
+		 fi ; \
+		 echo  "# define VERSION "\"$$a\" > version.h ; \
+		 date +"# define PACKDATE %m,%d,%Y" >> version.h ; \
+		 rm -rf spex$$a ; \
+		 mkdir spex$$a ; \
+		 mkdir spex$$a/sh ; \
+		 mkdir spex$$a/src ; \
+		 if [ $$a != "test" ]; then \
+		   echo "Running vi to edit ChangeLog ..." ; \
+		   vi ../ChangeLog ; \
+		   echo "Committing current state to GIT repository ..." ; \
+		   git commit -a --allow-empty -e -m $$aa ; \
+		   echo "Setting tag "$$a" ..." ; \
+		   git tag $$a || true ; \
+		 fi ; \
+		 cp -r $(addprefix ../,$(INST))  spex$$a ; \
+		 cp -r $(addprefix ../sh/,$(SH)) spex$$a/sh ; \
+		 cp -r $(sort $(SRC) $(SRC1) $(SRC2)) $(INC) $(MACRO) spex$$a/src ; \
+		 if [ $$a != "test" -a -d ../../docs ]; then \
+		   echo "Commiting current docs to GIT repository ..." ; \
+		   dir=$$(pwd) ; \
+		   cd ../../docs/ ;\
+		   echo $$a > source/version ;\
+		   git commit -a --allow-empty -e -m $$aa ;\
+		   echo "Setting tag "$$a" ..." ; \
+		   git tag $$a || true ; \
+		   echo "Running latex on documentation ..." ; \
+		   make latexpdf ;\
+		   cd $$dir ;\
+		   mkdir spex$$a/doc ;\
+		   cp ../../docs/build/latex/spex.pdf spex$$a/doc ;\
+		 fi ; \
+		 rm -f ../spex$$a.tgz ; \
+		 tar czf ../spex$$a.tgz spex$$a ; \
+		 if [ $$a = "test" ]; then \
+		   mv version.bak version.h ; \
+		 fi ; \
+		 rm -r spex$$a ; \
+		 if [ $$a != "test" -a -d ../../archive ]; then \
+		   echo "Updating spex_current.tgz on archive ..." ; \
+		   cp version.h ../../archive ; \
+		   cp ../spex$$a.tgz ../../archive/spex_current.tgz ; \
+		   echo "Done. Do not forget to run rclone!" ; \
+		 fi ; \
+	         echo "Archive file spex$$a.tgz was written." '
+
+.PHONY: clean depend interface tgz

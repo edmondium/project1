@@ -1,0 +1,244 @@
+#!/bin/bash
+
+# Paths to executables (can be set here)
+
+# SPEX_EXEC=
+# DFT_EXEC=
+# SPEX_THRU=
+# DFT_THRU=
+# THRU=
+
+# File containing q-point path
+[ ! "$QPTS_FILE" ] && QPTS_FILE=qpts
+
+## ========================================================================
+## Command line
+
+copy=''
+rest=''
+skip=true
+while [ "$1" ]
+do
+  if [ "${1:0:3}" = "-f=" ]; then
+    calc1="${1:3}"
+  elif [ "$1" = "-c" ]; then
+    copy=true
+  elif [ "$1" = "-r" ]; then
+    rest=false
+  elif [ "$1" = "-s" ]; then
+    skip=''
+  elif [ "$1" = "--help" -o "$1" = "-h" ]; then
+    echo 'Performs calculations along k-point path for band structure or spectral function.'
+    echo
+    echo 'Usage: spex.band <f=file> <-c> <-r>'
+    echo
+    echo 'Options:'
+    echo '  -f="f1 f2..." : Additionally save the output files "f1" ("f2"...) as f1_001, f1_002, etc.'
+    echo '  -c            : Copy executables to current directory.'
+    echo '  -r            : Avoids automatic appending of RESTART to the input file.'
+    echo '  -s            : Overwrite existing out files.'
+    echo '  --help        : Show this help.'
+    echo
+    echo 'Environment variables:'
+    echo '  $QPTS_FILE : File containing k-point path (defaults to "qpts")'
+    echo '  $SPEX_EXEC : Spex executable (defaults to "spex")'
+    echo '  $DFT_EXEC  : DFT executable (default depends on DFT code)'
+    echo '  $SPEX_THRU : Command through which Spex should be run, e.g., "mpirun -n 4" (no default)'
+    echo '  $DFT_THRU  : Same for DFT code'
+    echo '  $THRU      : Default definition for $SPEX_THRU and $DFT_THRU (no default)'
+    exit
+  else
+    echo "Unknown option: $1" >> /dev/stderr
+    exit 1
+  fi
+  shift
+done
+
+## ========================================================================
+## Set executables
+
+if [ ! -f "spex.inp" ]; then
+  echo 'Missing input file spex.inp' >> /dev/stderr
+  exit 1
+fi
+
+if [ "`grep '^ *ITERATE' spex.inp`" ]; then
+  DFT_EXEC='(not needed)'
+  DFT_THRU=''
+fi
+
+if [ ! -f "$(dirname "$0")/spex.execs" ]; then
+  echo 'Script "spex.execs" not found in the directory of "spex.band".'
+  exit 1
+fi
+
+. $(dirname "$0")/spex.execs
+
+## ========================================================================
+## Preparations and tests
+
+if [ ! -f "$QPTS_FILE" ]; then
+  echo "Missing k-point file $QPTS_FILE" >> /dev/stderr
+  exit 1
+fi
+
+sed '/WRTKPT/d' spex.inp > spex-band.inp
+echo >> spex-band.inp
+
+{ 
+while read -r a 
+do
+  if [ `expr "$a" : ' *KPT'` != 0 ]; then  
+    echo "#$a"
+    while [ $(expr "$a" : '.*\\') != 0 ]
+    do
+      read -r a
+      echo "#$a"
+    done       
+#  elif [ `expr "$a" : ' *JOB'` != 0 ]; then
+#    echo "#$a"
+#    echo `expr "$a" : ' *\(JOB *[^ ]*\)'` +`expr "$a" : ' *JOB[^:]*\([^ ]*\)'`
+  else
+    echo "$a"
+  fi
+done
+} < spex-band.inp > spex-band.inp1
+mv spex-band.inp1 spex-band.inp
+
+p=`grep '^ *JOB' spex-band.inp`
+calc=''
+if [ `expr "$p" : ' *JOB *SUSCEP .*+:'` != 0 ]; then
+  calc=suscep  ; [ "$rest" ] || rest=''
+elif [ `expr "$p" : ' *JOB *SUSCEPR .*+:'` != 0 ]; then
+  calc=suscepr ; [ "$rest" ] || rest=''
+elif [ `expr "$p" : ' *JOB *GW .*+:'` != 0 ]; then
+  calc=gw      ; [ "$rest" ] || rest='true'
+elif [ `expr "$p" : ' *JOB *GT .*+:'` != 0 ]; then
+  calc=gt      ; [ "$rest" ] || rest='true'
+elif [ `expr "$p" : ' *JOB *HF .*+:'` != 0 ]; then
+  calc=hf      ; [ "$rest" ] || rest='true'
+elif [ `expr "$p" : ' *JOB *PBE0 .*+:'` != 0 ]; then
+  calc=pbe0    ; [ "$rest" ] || rest='true'
+elif [ `expr "$p" : ' *JOB *COHSEX .*+:'` != 0 ]; then
+  calc=cohsex  ; [ "$rest" ] || rest='true'
+fi
+
+if [ ! "$calc" ]; then
+  echo 'Wrong or invalid job definition (e.g., JOB GW +:...).'
+  exit 1
+elif [ `expr "$p" : '.*:[^#]*:'` != 0 ]; then
+  echo 'Warning: There seems to be more than one job or k point on the line JOB GW.'
+fi
+
+exist=$(expr "$calc1" : '.*spectral')
+if [ $exist -eq 0 ] && [ $calc = 'gw' ] || [ $calc = 'gt' ]; then
+  grep '^ *SPECTRAL' spex-band.inp > /dev/null && calc1="$calc1 spectral"
+fi
+
+p=`grep '^ *RESTART' spex-band.inp`
+if [ ! "$p" ]; then
+  if [ "$rest" = 'true' ]; then
+    echo RESTART 00030 >> spex-band.inp
+    echo 'RESTART 00030 appended to input file.'
+  elif [ "$rest" = 'false' ]; then
+    echo 'Warning: RESTART not appended as requested (-r). Calculations may be expensive.'
+  fi
+fi
+
+## ========================================================================
+## Run band structure
+
+i=0
+{
+read nqpt scale
+while read a b c dum
+do
+  SECONDS=0
+  i=$(($i+1))
+  a=`bc -l <<< "scale=5;$a/$scale"` # scale=5 sets five digits
+  b=`bc -l <<< "scale=5;$b/$scale"`
+  c=`bc -l <<< "scale=5;$c/$scale"`
+  q=$a,$b,$c
+  echo 'New k point: ('$q')  '$i' of '$nqpt
+
+  printf -v j "%03d" $i
+
+  if [ -f "spex_$j.out" ] && [ "$skip" ]; then
+    echo "File spex_$j.out exists. Skipping ..."
+    continue
+  fi
+
+  sed '/^ *KPT/d' spex-band.inp > spex-band.inp1
+  sed '/^ *INTERPOL/d' spex-band.inp1 > spex-band.inp
+  rm spex-band.inp1
+  echo 'KPT +=('$q')' >> spex-band.inp
+  
+  if [ "$DFT_EXEC" ]; then
+
+    $SPEX_THRU $SPEX_EXEC -w --inp=spex-band.inp > spex_0.log 2>&1 < /dev/null
+
+    echo New k-point file generated.
+
+    $DFT_THRU $DFT_EXEC > dft.out 2>&1 < /dev/null
+    if [ $? != 0 ]; then
+      echo 'DFT run with "'"$dftlong"' failed. Please check the file "dft.out".' >> /dev/stderr
+      exit 1
+    fi
+    echo DFT output written to dft.out
+  
+  fi
+
+  [ $calc = gt ] && rm -f spex.uwan
+  rm -f spex.sig? suscepR
+  $SPEX_THRU $SPEX_EXEC --inp=spex-band.inp > spex.out.cur 2> spex.err.cur < /dev/null
+  if [ $? != 0 ]; then
+    echo 'Spex run failed. Please check the files "spex.out.cur" and "spex.err.cur".'
+    exit 1
+  fi
+  mv spex.out.cur spex_$j.out
+  mv spex.err.cur spex_$j.err
+  echo SPEX output written to spex_$j.out.
+  
+  if [ $calc == 'suscep' ]; then
+    if [ ! -f "suscep" ]; then
+      echo 'File "suscep" not found.'
+      exit 1
+    fi
+    mv suscep suscep_$j
+    echo suscep moved to suscep_$j.
+  elif [ $calc = 'suscepr' ]; then
+    if [ ! -f "suscepR" ]; then
+      echo 'File "suscepR" not found.'
+      exit 1
+    fi
+    mv suscepR suscepR_$j
+    echo suscepR moved to suscepR_$j.
+  fi
+
+  for a in $calc1
+  do
+    if [ "$a" ]; then
+      if [ ! -f "$a" ]; then 
+        echo "File $a not found."
+        exit 1
+      fi
+      mv "$a" "$a"_$j
+      echo "$a" moved to "$a"_$j.
+    fi
+  done
+  
+  echo    "Timing: $SECONDS"
+  echo -n "End: "
+  date -d "+$(($SECONDS*($nqpt-$i))) sec"
+  
+done
+} < $QPTS_FILE
+
+if [ "$copy" ]; then
+  rm "./spex_exec"
+  [ "$DFT_EXEC" ] && rm "./dft_exec"
+fi
+
+echo 'All done.'
+
+rm spex-band.inp

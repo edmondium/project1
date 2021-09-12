@@ -1,0 +1,1860 @@
+- 05.10
+
+* Macro SPECF_MSUM in "susceptibility.f" implements "suscep" step with the
+help of MPI reduce operations instead of load/store operations to shared
+memory. For testing.
+
+* The checksum test in "wannier.f" was still not working. Now fixed.
+
+* Bugfix in susceptibility: Arrays kpt1 and nkpts were redefined for each
+spin if [1,nkpt1] was divided. The definition was not restored for spin
+down. The arrays are not redefined anymore in the fixed version.
+
+* Bugfix in selfenergy (exchange), which could lead to an MPI deadlock.
+
+* Array structure of matrix(:,:) (suscep, screen, etc.) changed again. For 
+imaginary frequencies i, matrix(:,i) is again stored as a packed upper 
+triangle matrix and turned into a full matrix in selfenergy (for xGEMM).
+
+* Bugfix in finding symmorphic operations in "symmetry.f".
+
+* MPI reduce operations removed from "suscep" step in susceptibility. 
+Collective summation of array suscep(c) now done with direct load/store 
+operations (on separate array slices to avoid race conflicts).
+
+* If macro ACCESS_CONTIG defined in susceptibility, the array suscep(c) is
+defined strictly with favorable contiguous memory access. This requires a
+resorting of the array later-on (with reshape_permute and resort_array),
+which unfortunately is very slow and unparallelizable. But left for testing.
+
+* Default degeneracy limit taken if automatic degeneracy limit is not 
+satisfactory. (Spex does not stop anymore.)
+
+* Macro def_Ninit in cppmacro.h can be used to enable/disable collective
+initialization of shared arrays by Ninit (default disabled).
+
+* ScaLAPACK wrappers modified to reduce MPI communication overhead. Now, 
+output matrices are not returned anymore complete in all processes, and data
+distribution has to be done by the calling routine (see w_scalapack.inc).
+
+* Configuration script (configure) now detects MPI library name and defines
+MKL library accordingly, e.g., libmkl_blacs_intelmpi_lp64. Automatic name
+can be overridden with option --with-mklmpi=<name>.
+
+* Mtask (dynamical MPI work sharing) now used for MPIBLK in selfenergy.
+Old (static) work sharing can still be used with -Dold_mpiblk.
+Arbitrarily many Mtask epochs can now run in parallel.
+
+* Removed mpi_accumulate from selfenergy completely.
+
+* Made COPYDEG (copying of self-energy for degenerate states) work in MPI.
+
+* Using INTERPOL with ENERGY could fail in cases where ENERGY reorders states
+and the Wannier U matrix is read from an old calculation without that 
+reordering. This results in a wrong interpolation. (1) Spex now detects such 
+band reordering through a checksum, which contains a band-index-dependent
+factor. Spex would stop with an error in this case. (2) In order to be able
+to reuse a stored U matrix (in "spex.uwan"), there is now a possibility of
+specifying an energy file directly after INTERPOL, e.g., 
+INTERPOL ENERGY "energy.inp". These energies are NOT reordered.
+
+* W now written per frequency in spex.cor file instead as full matrix to 
+avoid exceeding MPI limit of message size inside HDF5. (Old format can still
+be read but not written.)
+
+* Exchange self-energy can benefit from a multipole-ordered MT mixed basis,
+which makes the Coulomb matrix sparse. The new keyword is MULTIPOLE
+(switched ON by default).
+
+* MPIBLK is set by default except for GW FULL (in which case MPIBLK can lead
+to work inbalances.
+
+* NOSTORE has been decprecated (now always set) and routine exchange is not 
+used anymore. Valence exchange is calculated in routine selfenergy together
+with GW.
+
+* Routine selfenergy completely rewritten. Parallelization uses Mblocks.
+W matrix now stored as full matrix instead as packed matrix to speed up
+matrix-matrix multiplications.
+
+* Keywords can now have arbitrary length.
+
+* FIXPHASE now works also with SOC. (Note: The SQA is currently assumed not 
+to change between different runs.)
+
+* Fix in getinput.f: As a preparatory step, there is a shift of eigenvalues
+ene(nkpti+1:nkpti+nkpti2) -> ene(nkpt+1:nkpt+nkpti2). If eigenvalues were 
+read from harddisc, this shift was done twice with the possibility of an
+overwrite error if nkpti+nkpti2>nkpt.
+
+* New keyword FIXPHASE to fix (gauge) coefficients of degenerate states and
+the phase of non-degenerate states.
+
+* Routines wavefproducts* (especially wavefproducts*_mt) revised.
+New routines wavefproducts4_*. New keywords MPIMT and MPIPW (default false).
+
+* Fixed a bug in "selfenergy.f" which could lead to "insufficient memory"
+due to the usage of an uninitialized variable as a dimensions in an
+array allocation (wintgrc).
+
+* Included MIT license.
+
+* Symmetry-related routines are now in "symmetry.f" including a new
+routine that determines the symmetry operations from scratch and then
+compares with the ones read from the input data.
+
+* Implemented symmetry generators.
+
+* Experimental implementation of the multipole-ordered Coulomb matrix.
+
+* Routines getkey now work for arbitrary argument lengths.
+
+* Made "upgrade" POSIX-compliant.
+
+- 05.09
+
+* Included script "upgrade" for upgrading Spex to a new version.
+
+* Possibility of modifying LAPW basis for ITERATE (section LAPW).
+
+* Scissor operator can be specified with ENERGY +1eV .
+
+* Rename BANDINFO->PROJECT.
+
+* Filenames in "spex.inp" must now be given in quotes.
+
+* Included preprocessor "loops" in Hwrapper.f. C pointers are now used for
+writing complex as real arrays.
+
+* KPTPATH now accepts a file for user-defined kpoint path.
+
+* Bugfix that could lead to segfault for JOB without argument.
+
+- 05.08
+
+* LOGDIV contribution to CONTOUR corrected.
+
+* Changed default: FFT included by default for vol>1200.
+
+- 05.07
+
+* JOB and BZ can be omitted in input file.
+
+* Error termination done with "call exit(1)" if supported by compiler, 
+otherwise with "error stop" (Fortran2008) if supported, otherwise with 
+"stop 1".
+
+* Added Wannier projections in Wannier interpolation output ("bands0" and
+"bands1").
+
+* Fixed a bug that inhibited output of Kanamori parameters.
+
+* Energy unit in output data files eV instead of Ha (can be chosen with
+the parameter escale in global.f).
+
+* New configuration options --with-hdf5, --with-libdir, --with-includedir,
+and --with-fc.
+
+* MPIKPT parallelization revised. Now uses a dynamic work sharing
+(routines Mtask_init and Mtask_indx): a subcommunicator when ready takes
+the next task (k point). The number of subcommunicators is decided in
+advance based on a simulated run. The old behavior can be used by defining
+the macro old_mpikpt.
+
+* New interface for Fleur MaX Release 5, now the default interface.
+
+* Bugfix in wavefproducts for WBLOCH (new trafo routines).
+
+* Bugfixes in iterate for MPI and BANDINFO as well as for SOC and BANDINFO 
+(minimal number of bands always zero).
+
+* Size-ordering of G vectors in mixedbasis.f was dangerous because rounding 
+errors (different compilers or optimization levels) could change the ordering 
+of G vectors of the same length (with possible consequences for restarts). 
+This is fixed.
+
+- 05.06
+
+* New keyword "TIMING" for detailed timing information. Compiling with
+"-DTIMING" enables more aggressive profiling, which may impair performance.
+Module "timer_util" is used. (Only "susceptility.f" currently instrumented.)
+
+* Different MPI (and MEM) work distribution implemented in susceptibility
+based on Mblocks routine. (Old behavior with -Dold_distrib.)
+
+* FFT now used by default for large systems (vol>1000).
+
+* STOREIBZ is made the default. Use STOREBZ for the old default behavior.
+
+* Logarithmic divergence implemented for HF and GW (keyword LOGDIV).
+
+* Race condition between shell-creating directory and directory visible from
+Fortran resolved. (GFortran issue)
+
+* MPI split color must not be negative. Corrected in w_scalapack.inc. 
+(OpenMPI issue)
+
+* Output "senergy" now includes also the exchange self-energy.
+
+* configure: New option "--with-hdf5=DIR" and "--enable-mpi=no" is now default 
+(instead of "auto").
+
+* configure now checks for HDF5 Fortran compiler wrapper h5fc to determine 
+include and lib directories (if necessary). 
+
+* Two bugfixes in iterate.f: No output of ITERATE SR BANDS (without BANDINFO).
+G-vectors function could return zero G vectors for large k.
+
+* New keyword: TRSOFF. Switches off usage of time-reversal symmetries.
+
+* GIT hash included in output (updated by make githash, make, or make all).
+
+- 05.05
+
+* Degeneracy limit for Coulomb matrix fixed at 1e-8 (instead of using edeg).
+
+* Cut of degenerate states in iterate.f made consistent with run from input 
+data.
+
+* Bugfix in routine freqc_range. (Happened with CONTOUR frequency mesh
+containing exact zero w=0.)
+
+* Orbitals projections (BANDINFO) now written to a file "spex.binfo".
+
+* Made BANDINFO work with INTERPOL enabling interpolated "fat bands".
+
+* INTERPOL queried from spectral_wannier_interpolation expected a file name.
+Fixed.
+
+* Strict treatment of degeneracies. Degeneracy limit determined automatically.
+Might turn out to be problematic for bad symmetries.
+
+* Definition of unique identification number (uin) of run, to be used for 
+scratch files (allowing simultaneous runs in the same directory).
+
+* Generic command line options (--version, --help) now treated before call to
+mpi_init to make them work on systems that do not allow MPI runs without a
+queuing system.
+
+* Routine "harmonicsr" optimized.
+
+* FROZEN default window is reduced to only contain states that have a minimum
+projection into space spanned by Wannier basis of (currently) 0.5.
+
+* Routine irreps_wannier still had call to old wavefunction trafo routine.
+
+* First variation in ITERATE exploits inversion symmetry for SOC calculations.
+
+* ITERATE SR or FR now overrides l_soc from Fleur. 
+
+* Macro WAN now a macro for usage of Wannier90 library.
+
+* BANDINFO reimplemented: now accepts same orbital definition as in Wannier
+construction. Also works for ITERATE .. BANDS.
+
+- 05.04.2
+
+* Bugfix in wannier.f for SOC (wrong spin index in call to new trafo routine
+wavefunction_mt).
+
+* configure script now sets default optimization level (-O) if no optimization
+option is given in FCFLAGS. (Also tries -O2 and -O1.)
+
+* New behavior: FROZEN without MAXIMIZE sets num_iter to 0 in "wannier.win".
+(Old behavior: FROZEN without MAXIMIZE was ignored.)
+
+* Writing of file "wannier.win" re-implemented. Now with more checks, 
+Wannier90 comments (# and !) allowed. "wannier.win" now written for each spin 
+separately.
+
+* Bugfix in complete_ene if lower bound (n1) different from 1. (Now complex
+part is ordered, too.)
+
+* Bugfix in application of new trafo routine (wavefunction_mt) in wannier.f
+for SOC.
+
+- 05.04.1
+
+* New wavefunction transformation routines. Old routines can still be used 
+with "-Dold_trafo".
+
+* Parallel Spex can now be compiled with a serial HDF5 library (which might
+lead to I/O overhead, though). The macro HDF5ser is set automatically by
+the configure script if a parallel HDF5 library is not found.
+
+* Routine Mwrite_n now simplifies writing to unit 6 from many processes in
+a controlled, synchronized way. Used in iterate.f and correlation.f.
+
+* Function pcycle can now skip communicator splittings that would exhaust
+the memory (also new macro PcycleM). Used in iterate.f to avoid too many
+k points running in parallel.
+
+* If compilation with HDF5 fails, the configure script now looks for a HDF5 
+include directory in $CPATH and reattempts compilation.
+
+- 05.04
+
+* New macro noSHARED enables compilation without the use of shared memory.
+
+* RESTART default changed: 32233 -> 22233.
+
+* Automatic (default) Hilbert mesh is now set for each job (in fact, kpoint)
+individually. (Before, it was set for the first job and kpoint and kept in
+memory.)
+
+* Usage of stack memory reduced in diagonalize_coulomb.
+
+* Introduced possibility of subdividing frequency ranges into several jobs,
+e.g., by {0:1,0.01}/4. Works with SUSCEP/R, DIELEC, SCREEN, and SCREENW.
+
+* Cleaned up implementation of multdiff_=2 (MULTDIFF INT or INTON) in
+susceptibility. The old implementation produced correct results but could
+lead to a format overflow ("****") in the output of "Residual wings"
+when calculated in parallel.
+
+* Irrep symmetrization threshold increased (and re-defined).
+
+* Symmetrization in susceptibility consumed a lot of memory (in particular
+for large numbers of MPI processes). This is solved. Also, arrays
+irrep_contr/t are now defined only for the upper triangle, and array zero
+replaced by array sirrep (with parameter sirrep_threshold).
+
+* Implemented band structure calculation with ITERATE (BANDS).
+
+* Implemented Wannier 3D plot with output to XSF file (XCrySDen).
+
+* Routine "coulomb_wannier.f" made more efficient. Parallelization might still
+require some more work (but Mblocks works very well here). New algorithm is 
+less restricted than old one, which can still be used with keyword WBLOCH.
+
+* Generic routine "Mblocks" for dividing arrays into sub-blocks for 
+distribution onto MPI processes.
+
+* Added inplace routines for mtrafo (trafo.inc) and enabled "negative" modes
+(flipped dimensions).
+
+- 05.03
+
+* Routine "iterate" made faster for systems with inversion symmetry.
+(LO symmetrization now done with routine "symmetrize".)
+
+* Shared memory (for hamiltonian, overlap, evec, ...) introduced in iterate.
+
+* New wrapper routines (partly included from "w_packmat.inc" and 
+"w_unitarytrafo.inc") make matrix operations (e.g., suscep->dielec->screen) 
+more stack-friendly.
+
+* Introduced new keyword SUBSET for selecting Wannier subsets.
+
+* "configure" can now determine if Wannier90 library is linked to MPI.
+Alas, MPI is not supported by the Wannier90 library yet.
+
+* ScaLAPACK problem of unconverged eigenvectors (info=2) solved,
+routines pzheevx and pzhegvx.
+
+* Default Hilbert mesh slightly redefined to allow for cases with 
+coarse meshes of spectra (e.g., DIELEC).
+
+* MEM separation now calculated for each MPI rank individually. (This 
+avoids unnecessary separation in some cases.) Furthermore, in case of
+different numbers of MEM packets in different ranks, it could happen 
+that a non-root rank wrote to standard output (leading to disorder in
+the output). This is fixed.
+
+* A wildcard (*) can be set for the upper band index after ORBITALS.
+A minimal upper band index is then automatically determined.
+
+* (Now obsolete, see "ScaLAPACK problem" above.) 
+Reimplemented ORFAC=0 workaround for ScaLAPACK diagonalization bug 
+(unconverged eigensolutions). Had disappeared in version 05.02 for
+some reason (?).
+
+* Shell script "spex.setkey" completely rewritten.
+
+* New script "spex.execs" is sourced by "spex.band" and "spex.selfc" to set 
+the executables.
+
+* Added Fortran parameters dftshort and dftlong as names of the DFT code.
+Can be queried with "spex -x" and used by shell scripts.
+
+- 05.02
+
+* MPI has the limitation that messages cannot be larger than 2GB. In the 
+wrapper routines of Mwrapper.f, this is accounted for by portioning messages
+into smaller messages if necessary. However, the same limitation applies
+to parallel HDF5, which internally uses MPI for message passing. Therefore,
+if the dataset is too large (>2GB), Spex divides it into two parts in a 
+divide-and-conquer algorithm.
+
+* The k vector (JOB definition) is now included in the sig files and
+checked in "dump.f". Before, it was possible to write self-energy data 
+to a sig file for a "+" k point, then change the "KPT +" definition but
+still read the same sig file leading to erroneous results.
+
+* If pade_poles fails to detect the poles with sufficient accuracy, an 
+attempt is made with added random noise. (Up to ten attempts.) This 
+allows many more frequencies to be used than before without the program 
+to fail.
+
+* Hwrapper: An HDF5 dataset is automatically written (and read) instead 
+of an attribute if the internal HDF5 attribute size limit of 64kB is 
+exceeded.
+
+* Bugfix for GWT: Program stopped with SPEX-BUG if GW and GT used
+different real frequency mesh.
+
+* GW (HF etc.) Fermi energy calculated automatically at the end if 
+sufficient energies are available. (Some energies may be taken from or
+adjusted to KS energies.)
+
+* Kpoint labels given in the list of kpoints in bands0/1.
+
+* Kpoint labels can be ten characters long now.
+
+* Bugfix in GW Wannier interpolation of magnetic systems: If KS energies
+had to be added (because JOB line missed some states), the spin-down
+interpolation overwrote the spin-up bands.
+
+* Behavior changed: Now self-energy type and freq. meshes from sigc files 
+override the definitions in "spex.inp". (Before, the program stopped with 
+an error.)
+
+* Bugfix in getinput: Wrong upper k-index bound in definition of emax/emin
+for metallic systems.
+
+* ScaLAPACK wrapper routines rewritten to simplify usage. Results are now
+returned identically in all processes (no broadcasting required anymore).
+
+* New ScaLAPACK wrapper routines (Minverse); used to improve scalability 
+of the inversion of dielectric functions.
+
+* New keyword NOSYM allows switching off (critical) usage of symmetry.
+
+* configure: LAPACK dependency of ScaLAPACK required different order of 
+libraries. Fixed.
+
+- 05.01
+
+* Calculation of spectral function for GW FULL parallelized.
+
+* Bug message caused by non-nullvector reciprocal lattice vector as 
+additional kpoint. Example KPT +=(1,0,0). Fixed.
+
+* Same deadlock as below (see "Removed deadlock in selfenergy.f") could 
+happen if -DLOAD unset. Fixed.
+
+- 05.00
+
+* Version for CECAM Workshop 2019.
+
+- 05.00pre34
+
+* New Spex launcher script (BASH); "spex.x" removed; new option "-x".
+
+* Parallel HDF5 has a limit on dataset size due to a corresponding limit
+on message size of the MPI library. Too large datasets lead to a HDF5 
+error. As a preliminary solution, such datasets are currently not written.
+(Needs a better solution.)
+
+* Fixed a possible MPI deadlock in susceptibility which occurred if 
+the number of MEM packets were not the same over the processes.
+
+* Eigensolutions (wavefunctions and energies) are reordered according to
+energy if ENERGY is used.
+
+* Made OMIT work again.
+
+* Made iterate work if number of processes exceeds number of bands.
+
+* Construction of cmt/cpw arrays for ITERATE FR made more efficient for
+parallel calculations. (Might still not scale well for large number of
+processes.)
+
+- 05.00pre33
+
+* Fixed a bug in def_nodes: mem0 was declared as integer instead of real_dp
+(since 05.00pre28).
+
+* All read and write routines are now in readwrite.f, including the 
+possibility of having other versions: readwrite_fleur.f, et cetera.
+"readwrite_tmpl.f" is a template.
+
+* Routine getinput tidied up.
+
+* Corrected ITERATE FR & MPI (distribution of coefficients in parallel).
+
+* RESTART behavior can be defined generally with a five- (or four-) digit
+argument (e.g., "RESTART 32233" corresponds to "RESTART 1"; 0-none, 1-read,
+2-write, 3-readwrite). The file restype.h defines the binary RESTART handles.
+
+* ITERATE & RESTART: KS.hdf written if it does not exist, otherwise read.
+
+* New checksum to check consistency of wave functions with restart files.
+
+* GT: Gamma point excluded by default (due to numerical problems with
+Goldstone delta peak). Included with -o=102.
+
+* Improved efficiency and parallelization of selfenergy_wannier.
+
+- 05.00pre32
+
+* Routine iterate parallelized.
+
+* MEM is maximal memory per physical node also with MPISPLIT SHRD.
+
+* Taylor series in freqintegral_poles_nonlin made more stable. (Exponent 
+overflow could lead to NaN.)
+
+* Syntax change: ZERO instead of NOZERO (default changed!), CONTOUR {}
+instead of CONTOUR [{}] and CONTOUR +-{} instead of CONTOUR {}.
+
+- 05.00pre31
+
+* Gamma zero-order contributions partly rewritten to reduce computational
+cost (time and memory).
+
+* Preceded mpi_win_free (Nfree) with mpi_win_fence (Nfence) to avoid
+RMA synchronization error of new IntelMPI library.
+
+* ALIGNVXC led to segfault if oselfc==2 or 3. Fixed.
+
+* Series expansions in freqintegral_poles_nonlin missed branch-cut case.
+Added another power series (Taylor series, see macro include_taylor).
+
+* Comments starting with "##" written to output (dump of spex.inp),
+comments starting with "###" written as warning.
+
+* Removed restriction of line length to 80 characters in "spex.inp".
+
+- 05.00pre30
+
+* Reduced memory demand for wintgrc in selfenergy.f using the modified
+routine tetrahedron_init. (Also: new function tetrahedron_weight.)
+
+* Macro ifort_vector_bug introduced in selfenergy.f to reproduce a strange
+ifort (v12) vectorization bug.
+
+* FREQINT NONLIN implemented for GW. Tested only for diagonal elements of
+Si, so far.
+
+* New FREQINT argument NONLIN for tetrahedron weight functions (routine
+tetrahedron_nonlin). This is the default for GT. (FREQINT SPLINE remains 
+default for GW).
+
+* Made freqintegral_poles_nonlin numerically more stable (for very small
+and very large "poles" p).
+
+- 05.00pre29
+
+* New job type KS.
+
+* Changed interpretation of integer argument n of KPTPATH giving k-path 
+density. The step size is defined as rvol**(1/3)/n. Default values are
+n=20 and n=100 for "qpts" (WRTKPT) and Wannier interpolation, respectively.
+
+* A file can be specified after INTERPOL. Then, the q vectors for the 
+Wannier plot are taken from that file (layout like "qpts" file).
+
+* PW wave-function products use less memory now (without FFT).
+
+* Out-projection of constant function from coulomb(:,1) (Gamma point) missed
+complex conjugation (at least since 05.00pre10).
+
+- 05.00pre28
+
+* New macros Error, Warn, Info, Bug.
+
+* Made new algorithm in coulomb_wannier work for complex dielectric tensors
+and rsite different from null vector. (Not tested thoroughly, yet.)
+
+* Analytic continuation for GT made to work with tetrahedron_nonlin. (-o=2)
+
+* Contour integration for GT with new routine tetrahedron_nonlin. (-o=1,2)
+
+* Noise parameter (absrand) in SMOOTHing reduced, because it had a too large
+effect on the results.
+
+* Variable mem now defined in node-shared MPI window (as used memory in that
+node).
+
+* Fixed wrong upper loop bound for writing SCREEN (nfreq instead of nfreqc)
+(since 05.00pre13).
+
+* Added kind parameter to size(...) for large arrays in Ninit (cppmacro.h).
+
+- 05.00pre27
+
+* Fixed a bug in quasiparticle for GW FULL and ALIGNVXC.
+
+* Fixed a bug in susceptibility that could have led to undefined offdiagonal
+elements of the dielectric tensor (since 05.00pre23).
+
+* Reimplemented reading/writing corfiles. Everything is automatic; h5merge 
+not needed anymore.
+
+* Reimplemented and generalized reading/writing dump files (dump.f):
+spex.sigx/c, spex.wcou, spex.ccou.
+
+* Implemented core contribution to self-energy (selfenergy_core).
+
+* Introduced macro Ninit(array,val) that initializes a shared array
+(array=val) in a distributed fashion (over the sockets). Automatically
+used by the new macro Nallocate0.
+
+- 05.00pre26
+
+* Renamed executables: energy -> spex.extr, band.sh -> spex.band, 
+selfconsistent.sh -> spex.selfc
+
+* Renamed output files: dielecLF -> dielecR, suscepr -> suscepR.
+
+* Change of syntax: {a..b,c} -> {a:b,c}. (The former still works, though.)
+
+* Fixed a small error in core polarization in head/wings. (Wrong radial
+integral used for l>0.)
+
+* Implemented core polarization with CORESOC (also for Zeeman-splitted
+states).
+
+* Order of SOC-splitted core states changed: 2p3/2, 2p1/2, 3p3/2, 3p1/2, ...
+
+- 05.00pre25
+
+* Changed automatic Hilbert mesh for spectra.
+
+* Implemented core polarization (susceptibility_core).
+
+* Transformation routines matrixtrafo, bra_trafo, ket_trafo, etc.
+replaced by mtrafo.
+
+* Adjusted to modern Fortran standard.
+
+- 05.00pre24
+
+* Introduced "contiguous" attribute to pointer declarations.
+
+* tetrahedron5: a dispersion-less core state can be assumed for core 
+polarization.
+
+* Missing GW values for Wannier interpolation are now taken from KS and a
+warning is issued.
+
+* Changed FFT default to 2/3 of the exact cutoff. Introduced FFT EXACT.
+
+* Fixed bug for integer arguments to MAXIMIZE MB.
+
+- 05.00pre23
+
+* Summation "suscep" in susceptibility did not scale well, in particular for
+calculation of spectra. Now (newly) parallelized over frequencies. (Requires
+MPI reduce operations.)
+
+* Implemented scissors operator to adjust energies not read by ENERGY.
+
+* Routine selfenergy_wannier parallelized.
+
+* ALIGNVXC debugged and implemented for GT.
+
+- 05.00pre22
+
+* Wrong LAPACK calls in inverse_zp. (Never used before. Now required for
+PLASMA METAL.) 
+
+* Adjustments due to gfortran test.
+
+* Assignment of HF FULL values in quasiparticle.f has been changed.
+
+* Interface defined for routine selfenergy (allowing for variable argument
+list).
+
+* Treatment of Gamma divergence refined for dielectric anisotropy.
+
+* Obvious compiler bug (ifort16+mpi) avoided by declaring hqp as intent(inout)
+in routine qp_adiabatic. (Compiler bug appeared only for -O2 and does not 
+occur for "-O2 -fno-inline-functions".)
+
+- 05.00pre21
+
+* Changed HILBERT behavior. Default parameters or auto-adjusted to frequency
+mesh if no HILBERT given. Simple summation with HILBERT NONE.
+
+* Made MAXIMIZE and FROZEN work for additional k points.
+
+* New keyword INTERPOL.
+
+- 05.00pre20
+
+* Made WANNIER->IRREP work for additional k points.
+
+* Fixed a bug in treating integer parameter for OPTIMIZE MB. 
+
+* configure now determines Wannier90 version and sets -DWANv2 if needed.
+
+- 05.00pre19
+
+* Routine tetrahedron5_init rewritten. No "active" parallelization anymore,
+k averaging revised. (Old version with -o=2)
+
+* Introduced interface definition "c begin interface" and "c end interface".
+Compilation must be prepared with "make interface".
+
+* Routine spectral_wannier_interpolation parallelized.
+
+* RESTART SIG is now RESTART 2 because "spex.cou" can be used like 
+"spex.sig". (Only exception: MPIKPT)
+
+* Reading from KS.hdf is now the default. Use -DnoHDF for reading from eig 
+and abcoeff.
+
+* New JOB GWT, which adds the GT self-energy from spex.sigt to the GW self-
+energy in routine quasiparticle.
+
+* readsig can now read partial selfx/c (sig version 3).
+
+* "Streamlined" GT into official version.
+
+* New keyword IRREP (WANNIER) lets Spex use Wannier irreps. Works only for
+highly symmetric Wannier functions (e.g., first guess).
+
+* PLUSSOC now overwrites KS.hdf, gwa, and spex.sym.
+
+- 05.00pre18
+
+* Spin quantization axis (other than z axis) implemented.
+
+* tetrahedron5_init: d2up (and d1up) could exceed maxeband. Fixed.
+
+* New keyword BACKFOLD: performs atom backfolding if set. Automatic if no
+backfolding vectors, e.g., (0,0,1), given. (Before, it was always automatic.)
+
+* KS.hdf now contains G points. Energies and G points read from KS.hdf if
+-DHDFread is set.
+
+* PLUSSOC now writes KS.hdf_new, gwa_new, and spex.sym_new.
+
+* Revised bethesalpeter.f. (orthog was defined incorrectly. Should be 
+overlap**(1/2), included tr(LOSS) in output.)
+
+* Made ALIGNVXC work again.
+
+* New macro "WS_wancent" in wannier.f. If set, the Wigner-Seitz supercell
+is defined for each Wannier pair individually. This improves the symmetry
+properties of interpolated quantities.
+
+* Introduced new keyword SPECTRAL for plotting the spectral function.
+The spectral functions are plotted for each k point to the file "spectral".
+If Wannier functions and KPTPATH are defined, an interpolated spectral 
+function is written to "spectralw". (Currently not parallelized.)
+
+* In new Wannier interpolation routines, the sum of weighted lattice points
+could differ from nkpt. This is fixed and a test is introduced.
+
+* GT routines adopted from Mathias (test version).
+
+- 05.00pre17
+
+* Command line argument "-w" for WRTKPT added.
+
+* New keyword MPISPLIT. Arguments: NODE, SOCKET, TYPE=..., SHRD=...
+
+- 05.00pre16
+
+* Wannier interpolation of GW bands in quasiparticle.f.
+
+* Command line arguments added, e.g., --inp=myspex.inp.
+
+* New default "uu" (instead of "+") for SCREENW.
+
+* plasma could become undefined (NaN) if rounding errors led to negative 
+plasma**2.
+
+* Program stopped if HUBBARD was specified without argument. Fixed.
+
+- 05.00pre15
+
+* Full installation possible with "make all; make install" including new
+caller utility "spex.x", which returns (calls) "spex.inv" or "spex.noinv"
+depending on the system (file "gwa").
+
+* Routine tetrahedron5_init parallelized over kpoints.
+
+* Routine (d)wavefproducts1/2_mt partly revised to avoid unnecessary local
+copies of arrays and to replace BLAS dot calls by gemm calls.
+
+* Wrapper functions for BLAS/LAPACK have partly been revised. Introduced new
+functions macmat, matmac, macvec, where "mac" refers to the adjoint of
+a matrix.
+
+* Blacs grid can be defined globally (Mgrd=.true.) or locally in the 
+ScaLAPACK wrapper functions (Mgrd=.false.). This solves the problem of the 
+global blocking of blacs_gridmap for MPIKPT: The grid is defined globally 
+for each subcommunicator directly after its creation in this case.
+
+* MPI wrapper functions Mcast and Msum rewritten to allow for very
+big arrays [size>huge(0)]. Buffer array avoided by mpi_in_place option.
+
+- 05.00pre14
+
+* Call to mpi_abort missed second argument (errorcode).
+
+* New keyword MPIKPT (global), which enables parallelization over outer
+k-point loop. Combines nodes into subcommunicators that calculate k points 
+independently. Don't use if blacs_gridmap is globally blocking; or use 
+noSCALAPACK in wrapper.f. 
+If MPIKPT is specified, different restart files (spex.cor.c1,2, etc.) 
+and different sig files (spex.sigc.c1,2, etc.) are written. The latter 
+are automatically merged when a RESTART SIG run is performed. The former
+should be merged with h5copy. (Might be automized in a future version.)
+
+* Additional parallelization over inner k-point loop in susceptibility.
+
+- 05.00pre13
+
+* Included preparation stage for Portland compiler in Makefile.
+PGI does not allow preprocessed files to extend beyond 132 columns. The 
+preparation stage (simplify) cuts overlong lines into segments.
+
+* Bug fixed in routine integrate_spectralf: Undefined wings if HILBERT 
+(or FSPEC) was unspecified, in which case a simple k sum is performed.
+(Bug entered in 05.00pre8)
+
+* File spex.cor made into a HDF5 file.
+
+* Merged correlation.f and spectra.f into new correlation.f.
+
+- 05.00pre12
+
+* Changed output of effective parameters (Hubbard and Kanamori). Now per atom
+and shell according to ORBITALS definition.
+
+* MPI macros renamed.
+
+* Removed race conflict in calculation of RPA correlation energy.
+
+* Routine quasiparticle parallelized.
+
+* New macro -DHFDread that replaces read_cmt and read_cpw by a HDF call
+(for testing).
+
+* Scalapack used in diagonalize_coulomb and selfenergy (for pseudoinversion
+of olap).
+
+- 05.00pre11
+
+* Array overlap_gpt replaced by much smaller array cstep.
+
+* Removed deadlock in selfenergy.f, which happened in the unlikely case that
+Msize > bandup. (Now a new communicator is created with Msize = bandup.)
+
+* Hirarchy of communicators can be created with begin_split and end_split.
+
+- 05.00pre10
+
+* Arrays coulomb and ctrafo are kept in shared memory now.
+
+* Parallelized routines coulombmatrix, structureconstants, and
+diagonalize_coulomb.
+
+* Merged routines coulombmatrix and coulombmatrix1.
+
+* Removed keywords SCALE and PRECONST.
+
+* Problem with atomic backfolding in wannier.f in complicated crystal 
+structures solved.
+
+* Routine structureconstant revised. SCALE is now set automatically (unless
+SCALE is set explicitly). In the old implementation, it could happen that the
+real-space summation was not completely symmetric so that a very strict
+convergence criterion was necessary to avoid symmetry breaking.
+
+- 05.00pre9
+
+* Important fix: Since 05.00pre3 there has been a bug related to the automatic
+tetrahedron decomposition; "alladd" was not set properly.
+
+* Array dimensions of stars are now properly read from file "stars". (Fleur
+had to be modified slightly.)
+
+- 05.00pre8
+
+* Included configure script (made with autoconf) that creates the Makefile.
+
+* Check with gfortran revealed quite a number of non-conforming constructs
+and potential bugs that went unnoticed by ifort, e.g., in the parser. Also,
+the FFTW3 library was used wrongly.
+
+* Implemented new keyword MPISYM (in SENERGY). It avoids symmetry breaking
+for MPI calculations if Pade is used in selfenergy.f. (Otherwise no effect.)
+Exception: Not used for CONTOUR with second argument and FREQINT PADE.
+
+* susceptibility.inc: Hilbert summation runs in parallel if Mpar=.true.
+(Requires a lot of communication, computation time could go up.)
+
+* Implemented new JOB type: PBE0.
+
+* New preprocessor macro LOAD. If set, wave functions are read in from
+harddisc, otherwise they are stored in memory (shared memory in case of MPI).
+
+* MPI-3 shared memory used for matrix(w) allocated in routine correlation.
+
+- 05.00pre7
+
+* Included new arguments to MULTDIFF in section SUSCEP: INT and INTON. 
+MULTDIFF means that the factor (ej-ei) is multiplied to <M i|j> because 
+<M i|j> \propto 1/(ej-ei). So, <M i|j>*(ej-ei) varies less. This is 
+compensated by multiplying 1/w later. The old behavior is to multiply 1/w
+in the Hilbert weighted sum. The new behavior (with INT) is to incorporate
+the factor 1/w into (the frequ. integration of) the weighting factor. 
+(INTON corresponds to ON.) It is expected that INT improves convergence
+in cases of small band gaps and metals. (Latter not tested yet!)
+
+* Definition of Hilbert mesh changed. Before: First mesh point at bandgap,
+but all weights necessarily vanish there, so this point is redundant.
+Now: First mesh point at bandgap+dw/2, where dw is the freq. interval
+over which the weights are averaged; so, first mesh point in the middle 
+of that interval. Furthermore, the bandgap is really the minimal gap value
+depending on the momentum transfer (q point). (Frequency range determined by
+call to tetrahedron5_init.) All this for keyword HILBERT.
+Keyword FSPEC kept for backwards compatibility and behavior restored to 
+old behavior, i.e., Hilbert mesh always starts at w=0.
+
+* Removed keyword LFRAC. The inverse dielectric tensor is now converged auto-
+matically. No expansion in spherical harmonics is performed anymore.
+(Arrays headY, wingY removed.)
+
+* Disabled k averaging in tetrahedron6_init because R breaks symmetry.
+
+- 05.00pre6
+
+* Routines susceptiblity_wannier.f and bethesalpeter.f revised.
+
+- 05.00pre5
+
+* Possible bug fixed in susceptibility.inc: Call of integrate_spectralf 
+contained suscepc(i,j,:) and suscepc(j,i,:). Temporary arrays possibly 
+created by compiler. If i=j, first array is updated, second is not! 
+Writing second temporary array back to suscepc(i,i,:) could have undone 
+the update of the first! Temp arrays are created only with out2(*) for 
+the second array in called routine, but not for out2(:) as it was 
+implemented. This had avoided the bug to materialize.
+
+-05.00pre4
+
+* Bugfix in waveftrafo_mt: Do not divide by phase if lwan=.true. 
+(bug entered with new phases). 
+
+* Tetrahedron weights are averaged at the "borders". Cutting of degenerate
+subspaces should not lead to different results anymore (tetrahedron5).
+
+-05.00pre3
+
+* Introduced tetrahedron6_init for BZ integration of f(k)exp(ikR) and the
+corresponding gamma_divergence2.
+
+* Changed output of Wannier Coulomb matrix. RSITE can take a list of site
+vectors now.
+
+* Modernized Makefile: CHECK in FLAGS and automatic built of dependencies.
+
+* New keyword MPILOOP to control parallelized run in selfenergy.
+
+* HDF5 read and write of wave functions. First working parallel version.
+
+* Choice of tetrahedron decomposition now with the condition of shortest
+common diagonal. Before a fixed decomposition was used (use fixed_tetra in
+tetrahedron.f to enforce old behavior).
+
+* Fix in tetrahedron.f (Fermi-surface integration): 
+(etetra(4)-etetra(1)) -> (etetra(3)-etetra(1))
+
+* Implemented Bloechl corrections (keyword BLOECHL). 
+
+* Fixed wrong allocation of wintgr.
+
+* Fix for ADDBAS: Slope at MT boundary (dbasp) was undefined.
+
+* All changes for 04.04 (see below).
+
+* First MPI parallelized version. Wavefunctions are still copied to all
+processes instead of distributed.
+
+* New keyword ENERGY for replacing the single-particle energies.
+
+- 05.00pre2
+
+* Bugfix in wannier.f: See 04.03 below. And some more changes.
+
+- 05.00pre1
+
+* Implemented SX and COSX.
+
+* Changed default: SELECT without LOs includes semicore LOs by default but
+not the LOs at higher energies.
+
+* Implemented disentanglement method for Hubbard U calculation.
+
+* Calls of getkey moved from getinput into respective subroutines.
+
+* Preparation of parallelization:
+  - Band summation occ*unocc in susceptibility.
+  - stop -> call abort()
+  - removed old wavefproducts and TESTPROD
+  - switch dimensions in cmt and cpw
+  - first dimension in cpw is 1:ngpt(ikpt) and ngpt->ngptall
+  - combination STOREIBZ & lkptadd works now
+
+* The combination FFT and APPROXPW produced wrong results, which was caused
+by an unorthodox array definition for FFTW3. The definition was ok for fullpw 
+but not for APPROXPW.
+
+- 04.04
+
+* Introduced function for principle value of complex logarithm (ln) in
+susceptibility. The Fortran 2003 standard has changed the definition of log.
+(It distinguishes between positive and negative zeros, i.e., +0 and -0, 
+so-called "signed zeros".)
+
+* Enabled calculation of non-magnetic systems with odd number of electrons.
+
+* Changed merging of blocks in susceptibility.inc.
+
+* Bugfix in getinput: maxband->maxeband in dimension of wintgr (magn. sys.)
+
+* Made MAXIMIZE (Wannier) work for RESTART & magnetic systems.
+
+- 04.03
+
+* Bugfix in wannier.f: wrong sign in IPW overlap (relevant for systems w/o
+inversion symmetry).
+
+* Bugfix in new subroutine wavefproducts: The implicit summations over
+mat(lm,:) in the determination of lm1 and pnt in the trafo section missed the
+upper bound, now mat(lm,:nn). This lead to unpredictable behavior.
+
+- 04.02
+
+* Clean up arrays cmt and cpw beyond ngpt() and nband().
+
+* Hilbert mesh generated differently for calculations with and without add.
+k point. Fixed.
+
+* Fixed incorrect exit criterion for band summation of HF-only in selfenergy.
+
+- 04.01
+
+* Definition of CONTINUE GW FULL results has been changed (basically back to
+the definition used until version 04.00pre9): In this case, we can interpolate
+the self-energy matrix \sigma(E) only for real E, while its eigenvalues are 
+complex. So, for a given eigenvalue we perform a perturbative solution once
+(around the real E) to get the final solution.
+
+* Fixed incorrect evaluation of exchange self-energy with NOSTORE (performed
+in selfenergy.f) for systems without inversion symmetry. This bug was introduced 
+in version 04.00pre16.
+
+* Bugfix: Identification of magnetic semiconductors failed (Fermi level in
+in getinput). This bug was introduced in version 04.00pre16.
+
+* bethesalpeter: overlap_wan was incorrectly defined.
+
+- 04.00
+
+* Bugfixes
+
+- 04.00pre16
+
+* Routines for wave-function products completely rewritten (wavefproducts_new.f). 
+To test use -DTESTPROD in the Makefile. Then, both the old (wavefproducts.inc) 
+and new routines are used and the results are compared (including the timings).
+Some "teststops" are included to avoid calculation of cases that have not
+been tested.
+
+* Changed Fermi energy determination.
+
+* Added optional status output in getkey.
+
+* Redefinition of atomic basis enabled in Wannier construction (back-folding
+into Wigner-Seitz cell). This avoids bad Wannier interpolation.
+
+* Wannier construction failed for non-magnetic systems with SOC. Corrected.
+
+* Irreps of P and W are exploited now, i.e., the block-diagonal form of
+P and W is used to accelerate the code. (Macro WBLOCK)
+P: Adding the contribution of symmetry equivalent k-points involves the 
+great orthogonality theorem, which is used to decide what P elements are
+non-zero.
+W: The information above is stored in the array cblock. If cblock is 
+allocated, W is transformed into a block-diagonal form at the beginning
+of the self-energy routine.
+
+* Enabled STOREIBZ in irreps.
+
+* Introduced jobtype macro (for setting jobtype indices globally).
+
+* Behavior of HILBERT modified. (Keyword introduced much earlier.)
+
+- 04.00pre15
+
+* Implemented SOC for Wannier construction.
+
+* New wannier.f more thoroughly tested. Introduced Euler angles for orbitals.
+
+* Corrected wrong call of getkpt1_new_fullBZ in selfenergy!!! (case
+.not.job1%full)
+Also introduced nkpt0 for the if statement that decides whether the full 
+BZ is used or the EIBZ.
+
+* New wannier.f routine that does the Wannier construction without calls
+of Fleur routines. Remains to be tested.
+
+* First version of IBC: only for P. Purely experimental.
+
+* susceptibility.inc completely rewritten.
+
+- 04.00pre14
+
+* Wildcard was incorrectly defined. Absolute frequency range [{...}] has
+the Fermi energy at 0. The same applies to the array freqc1 in selfenergy.f, 
+quasiparticle.f, etc.
+
+* Diagonal elements of the Hermitian QSGW self-energy are taken at the 
+quasiparticle energy (using Taylor 1st order) instead of at the KS energy.
+
+* If characters in one block are inconsistent, the threshold irrep_thr 
+is increased accordingly and the blocks are redefined. There is a macro 
+(NO_AUTO_INCREASE) to avoid this.
+
+* Corrected an error in the calculation of <phi|MTolap|phi> in irreps.f for
+SOC.
+
+- 04.00pre13
+
+* Character table is written.
+
+* Corrected wrong criterion for Drude separation.
+
+* The plasma frequency is made invariant under rotation within degenerate
+subspaces (by taking the trace over deg. states before taking the norm of
+the gradient). This is a pragmatic choice.
+
+* MT basis is written to / read from  spex.mb (if RESTART).
+
+- 04.00pre12
+
+* New keyword PLASMA. (The Drude term can produce a sharp pole in W and thus
+in the self-energy, in particular if the Plasma frequency is small, such as
+in Bi.)
+
+* exchange.f: If nkpt1=nkpt, symmetrization is not performed, but then the
+factor 1/nsym1 is wrong! This is corrected.
+
+- 04.00pre11
+
+* gfortran found errors in diagonalize_coulomb and selfenergy that ifort
+graciously overlooked. These were corrected as well as a few non-standard
+constructions.
+
+* Output in quasiparticle.f changed for FULL calculation. Spin information
+added.
+
+- 04.00pre10
+
+* The Pade extrapolation is highly non-linear. A consequence of this is
+that it can break the symmetry. The symmetrization in quasiparticle.f,
+at least, makes the self-energy symmetric again. It should be checked
+later how much the results are influenced by inaccuracies in the Pade
+extrapolation. The problem concerns CONTINUE and CONTOUR (without the
+second argument).
+
+* Added a detailed note about the problem of degeneracies for complex
+operators.
+
+* Found (and corrected) a mistake in GW FULL CONTINUE calculations for systems 
+without trs: In this case, the Pade (also the pole fit) extrapolation of 
+offdiagonal self-energy matrix elements have to be multiplied in addition by a 
+phase when extrapolated to negative frequencies (i.e., below the Fermi energy).
+The phase is sig/conjg(sig) where sig is the self-energy matrix element at w=0.
+
+* A file qsgw is created by Fleur and read by Spex. It contains the 
+Hermitianized self-energy for QSGW calculations.
+
+* Corrected an error in the symmetrization routine in quasiparticle.f.
+
+- 04.00pre9
+
+* Implemented SOC for QSGW. Also reworked the QSGW implementation in Fleur
+(new version 03.2013). There is a symmetrization in Spex now that avoids
+symmetry breaking. And: time-reversal symmetry is now used in general for
+SOC calculations (also for systems with inversion symmetry).
+
+- 04.00pre8
+
+* First version with supposedly working QSGW. Fleur (new version 02.2013)
+reads in the file spex.qsgw (containing \Sigma-vxc in KS states) and
+constructs the file fleur.qsgw (\Sigma-vxc in APW/LOs), then performs an SCF
+run (gw=3). SOC is not implemented for QSGW yet!
+
+* The calculation of vxc within Spex (calc_vxc) missed a rotation when symmetry-
+equivalent sites are treated. This is corrected.
+
+* Corrected an error in the writing of spex.qsgw. (The written matrix has been
+changed to \Sigma-vxc.)
+
+- 04.00pre7
+
+* Removed a bug in quasiparticle.f that led to wrong imaginary parts of the
+GW energy if more than 500 steps were required to solve the quasiparticle
+equation (in which case the step size was scaled down by 50% leading roughly
+to a 50% error in the imaginary part of the energy).
+
+* Corrections of zero order in k (.not.NOZERO) implemented (which was the
+last missing feature after the rewrite of selfenergy.f).
+
+* Made calculation of metals work for "CONTOUR [...]" and FREQINT PADE 
+(in which case the Drude term cannot be separated.)
+
+* bando was determined incorrectly because of a wrong upper limit of the loop
+(should be maxeband, was maxband).
+
+- 04.00pre6
+
+* BANDINFO now also calculates the s,p,d,f,g decomposition of quasiparticle 
+  wave functions in the case of full GW/HF calculations.
+
+* Quasiparticle wave functions are now written to spex.qp
+
+- 04.00pre5
+
+* Small values of the Wronskian in the construction of the MPB-APW can lead
+  to numerical instabilities. This is avoided now by using pairs of MT
+  functions with maximal Wronskian (routine diagonalize_coulomb).
+
+* BANDINFO now works also for SOC.
+
+* Implemented RPA correlation energy (keyword RPAENE).
+
+* Made calculation of metals work in the new selfenergy routine.
+
+- 04.00pre4
+
+* Introduced smoothing function in routine gamma_divergence (exchange.f).
+  (This changes HF values of occ. states and all GW values!)
+
+* Irreducible wedge of shifted k-point set is written to kpts. It cannot be used
+  with STOREIBZ, yet, though.
+
+* The default RESTART option reads spex.cou/cor. The extended option "RESTART SIG"
+  also reads spex.sigx/c if available.
+
+- 04.00pre1
+
+* Replaced routine vxc by read_vxc.
+
+* Beta version for full self-energy calculations
+  * Introduced quasiparticle.f that solves quasiparticle equation
+    (previously in correlation.f)
+  * irreps.f adds additional states (to include subspaces) if necessary
+  * Writes spex.qsgw for QSGW calculations (never tested).
+  * If NOSTORE, the bare exchange is calculated in selfenergy.f now;
+    exchange1.f is removed.
+
+* Many changes since last update ...
+  * JOB QP is now called JOB GW
+  * New keyword FFT (Fast-Fourier transforms for plane-wave products)
+  * New keyword FREQINT (allows Pade integration with FREQINT PADE)
+  * Analytic continuation with Pade approximant with CONTOUR (without argument)
+  * New file freqintegral.f; replaces fourier.f; IMAGTIME support discontinued
+  * Irreps for Wannier function now used to accelerate suscep calculation.
+  * Introduced new bra_trafo1. Kept original routine (bra_trafo).
+    (Not clear why?! Probably mathematical derivation simpler?)
+  * Many more I suppose ...
+
+* Started but not finished:
+  * Full self-energy calculations (JOB GW FULL); 
+    complete rewrite of selfenergy.f (several features are disabled currently)
+  * GT self-energy (JOB GT)
+  * Incomplete-basis-set correction
+
+- 03.00
+
+* Spatial and time-reversal symmetries now fully implemented for spin-orbit
+coupling. (Fleur can only use the symmetry operations that leave the spin
+quantization axis invariant, though. Therefore, there is an alternative symmetry 
+file "spex.sym" for Spex now, which contains all symmetry operations, while 
+"sym.out" contains those for Fleur. If "spex.sym" does not exist, Spex uses
+"sym.out" as usual.)
+
+* File "spex.outfile" can now also be read for CONTOUR option.
+
+* Fixed wrong formula in routine derivative.
+
+* Introduced new keyword CORESOC, with which the spin-orbit splitted core states
+are used for the bare exchange (instead of the averaged ones). In future, this
+might be taken as the default.
+
+* Introduced new keyword ALIGNVXC, which tells Spex to align the chemical 
+potential of vxc (i.e., to shift vxc) to that of the self-energy.
+
+- Workshop version
+
+* Modifications for the XLF compiler (Jump) and changes in read_write for the
+new Fleur version.
+
+* Calculation of HUBBARD parameter now relies completely on Wannier functions. 
+Thus, the definition of the Hubbard subspace is done in "proj". All arguments
+of the keyword HUBBARD have been removed. Now the keyword is merely a switch.
+
+* Introduced keyword MTACCUR, which tests the accuracy of the MT basis (LAPW).
+
+* Calculations for Bi (by Gustav) showed that the screened interaction
+exhibits very large variations close to w=0 for semimetals. Therefore, a
+denser frequency mesh should be used there. Now, the program issues a warning
+and gives a new list of frequencies that can be copied to a file and used with
+"MESH <file>" in spex.inp.
+
+- 03.00pre8
+
+* Implemented GW+SOC. (Core states are still spin averaged, though.)
+
+* First step towards off-diagonal elements (added irreps.f)
+
+* Bugfix for Tim: dcprod was not considered for HUBBARD.
+
+- 03.00pre7
+
+* Removed incorrect preprocessor directives in integrate_spectralf 
+(susceptibility_wannier) for -DINV. 
+
+* Corrected wrong equations in bethesalpeter! The inverse of the square root 
+of the Wannier-product overlap was used instead of just the square root 
+(cmp. notes).
+
+- 03.00pre6
+
+* Made sure that the phases are correctly taken into account in case of 
+inversion symmetry when the Wannier U matrices are read in (UREAD).
+
+* Finally implemented additional k point for Wannier-function calculations
+(magnetic response function).
+
+* Small bugfix in tetrahedron (in the energy averaging).
+
+* Coulomb eigenvalue of constant function (coul(1)) now set to zero (following a
+bug report by Rey: screen contained a nonzero head element for k=0).
+
+* Introduced new keyword RSITE for additional off-site Coulomb matrix elements.
+
+* Syntax of keyword HUBBARD changed: HUBBARD now accepts more than one atom type:
+e.g.  HUBBARD  1 d 0.5,5  2 d 0.5,5
+
+- 03.00pre5
+
+* Additional k-point for Wannier-functional calculations does not work at
+the moment.
+
+* The BZ sum in coulomb_wannier must run over all instead of only the irreducible
+k points. Fixed.
+
+- 03.00pre4
+
+* Implemented additional k point for Wannier-function calculations.
+
+* Wannier functions should now also work in the real version (-DINV).
+
+* Routine wavefproducts3 completed to allow STOREIBZ for Wannier functions.
+
+* Implemented APW/LO construction for MPB (in routine diagonalize_coulomb).
+Keyword NOAPW in section MBASIS forces old behavior.
+
+* Introduced new keyword WGHTTHR in section suscep, a threshold for the
+tetrahedron (or Gauss) weights in susceptibility.
+
+* Introduced WRITE INFO for writing files like spex.sf, spex.sec etc.
+(previously the default) and WRITE EXT for writing input files for other
+programs (e.g. qpts for Fleur and runch0 for ASW).
+
+* MPB MT functions are now ordered according to increasing eigenvalues (with
+the constant function at the top for l=0).
+
+- 03.00pre3
+
+* Implemented new keyword KPTPATH.
+
+* MB=... PW=... replaced by new keyword OPTIMIZE MB ... and PW ... in section
+MBASIS.
+
+* Multiple k points now possible in spectra and spectra_wannier.
+
+* Loop over jobs is now in spex.f.
+
+- 03.00pre2
+
+- 03.00pre1
+
+* Implemented BANDOMIT keyword.
+
+* Started to implement Wannier support.
+
+- 02.06.2
+
+* New macro ALTERN sometimes leads to slower execution and does not work with
+extrapolar approximation. Disabled again.
+
+- 02.06.1
+
+* Fitting procedure for analytic continuation can be done with additional
+constraints, i.e., integrability of the self-energy and continuity of its 
+derivative. For example, use CONTINUE 2c.
+
+* New summation of susceptibility matrix (macro ALTERN) might be faster (and
+is hopefully more cache-friendly). The now needed transformation "transposec" 
+(case  CONTOUR) is a bit slow, though.
+
+* Multiplications with Hilbert frequencies for MULTDIFF are now done in a more
+efficient way. Routine weight_multdiff removed.
+
+- 02.06
+
+* Rounding errors led to a wrong determination of the W mesh for CONTOUR. Fixed.
+
+* Averaging over shifted k points in tetrahedron_init did not work for metals.
+
+* In some cases (use of udot) the mixed basis was not defined properly. Fixed. 
+
+* Changed routine sphbessel_integral in coulombmatrix(1).f. There, slight
+numerical errors led to warnings about an "unstable formula", which should now
+be avoided.
+
+* Fixed a bug which prevented rewriting of spex.cou in coulombmatrix1.
+
+* Fixed a bug in susceptibility_extra (allocation error in spin-polarized
+case).
+
+- 02.06pre4
+
+* Extrapolar approximation in selfenergy made more efficient.
+
+- 02.06pre3
+
+* Extrapolar approximation tested for GaAs (system without inversion symmetry).
+
+* Transformation routines rewritten (especially for time-reversal symmetry) and 
+tested.
+
+- 02.06pre2
+
+* Routine susceptibility rewritten. Now there is only one version for both
+spectra and selfenergy. Extrapolar approximation should now also work for contour
+integration.
+
+- 02.06pre1
+
+* Extrapolar approximation implemented in routines susceptibility and selfenergy. 
+Test version.
+
+* Gaunt condition l+l1+l2=even is now used in the mixed-basis construction.
+(This changes the mixed basis from previous calculations! However, final results
+should be similar.)
+
+* Determination of minimum and maximum bands for tetrahedron method in 
+routine selfenergy for CONTOUR calculation was wrong. Fixed.
+
+* Fixed a stupid bug in correlation.f: the array screenw was assumed to be
+Hermitian in the addition of the spherical average of the wing*wing term.
+It is of course not Hermitian for w>0.
+
+* New keyword DISORDER in section SUSCEP. Replaces the infinitesimal \eta in
+the denominator by a finite value: 1/2*tau, where tau is given as a paramater.
+
+* Applied the previous changes also to trafo2 in susceptibility.f
+(contribution of cores).
+
+- 02.05.2
+
+* Usage of time-reversal symmetry in susceptibility.inc was wrong. Changed
+conjg(suscep1)->transpose(suscep1). Also matrixtrafo had to be rewritten,
+and new routines bra_trafo1 and ket_trafo1 had to be written. One day I 
+should clean up trafo.f.
+
+* Fixed a bug in spectra.f (fullpw->.not.fullpw).
+
+* Changed format of spex.cor and spex.spc. 
+
+* Fixed bugs in cubicspline (wrong array bounds), freqintegral (wrong
+declaration of a(:) coefficients) as well as iterate and checkinput (for kptadd).
+
+- 02.05.1
+
+* It seems that the imaginary frequency mesh is not chosen optimally. 
+Especially close to w=0 there are too few mesh points. Therefore it is now 
+possible to add mesh points close to w=0, by e.g. MESH 10+3 10. In this 
+case three points are added between freq(1) and freq(2), two points between 
+freq(2) and freq(3) and one point between freq(3) and freq(4).
+
+* Cubic spline interpolation is now also used for the frequency integration 
+of GW. (Before a simplified spline interpolation was used.)
+
+* The direct solution for the quasiparticle energies in the case of contour 
+integration was calculated wrongly. Only in the limit of infinite lifetimes, 
+i.e. imag(SIGMA)=0, it was exact. This is fixed. Now cubic spline 
+interpolation is used for SIGMA_c(w).
+
+- 02.05
+
+* Optimized routine momentum_matrix.
+
+* Added timing information in exchange.f and selfenergy.f.
+
+* New keyword LCUT added in section WFPROD: l cutoff for wave functions in 
+the calculation of the wave-function products.
+
+- 02.05pre2
+
+* (De)Selection of LOs for mixed basis in SELECT now possible. 
+See documentation.
+
+* Orthonormalization of radial functions taken out again. LO construction 
+is now undone in iterate.f.
+
+- 02.05pre1
+
+* Radial functions are now orthonormalized before the construction of the 
+mixed product basis.
+
+* Introduced new keyword ITERATE, which tells Spex to construct a 
+non-relativistic LAPW(+LO) KS Hamiltonian (using the total potential read 
+in by read_pot) and to diagonalize it. The calculation then proceeds with 
+the new wave functions and energies. This is mainly intended for testing 
+purposes. Note that for many materials a relativistic treatment is more 
+accurate.
+
+* Optimized the routines intgrf (and similar) and derivative. A power-law 
+behavior f(r)=c*r**a is now assumed with a > -1. (Before we used 
+f(r)=d+c*r**a.) Note that for relativistic radial s-functions the case 
+a < 0 must be allowed.
+
+- 02.04
+
+* Changed k*p perturbation theory correction in selfenergy.f. Remains to be 
+tested.
+
+* Fixed a stupid bug for BANDINFO, which had sneaked in somehow.
+
+* New FFT routines (which are not used yet).
+
+* Fixed a bug in wrapper: inverse_zp1 contained LAPACK calls for a symmetric 
+rather than a hermitian matrix.
+
+* PW part of wavefproducts completely rewritten. It is faster now. 
+(Furthermore the old version did not work properly.)
+
+* Introduced (global) keyword DIPOLE for the calculation of dipole matrix 
+elements.
+
+- 02.03
+
+* Keyword FULLPW replaced by APPROXPW. The default is now to evaluate
+<M' phi|phi> exactly. The previous approximate evaluation can be used
+with the keyword APPROXPW. (MINCPW should only be used in this case.)
+Note that the exact evaluation takes considerably longer, but convergence
+wrt GCUT is much faster (and smoother). While previously GCUT=1.25*kmax
+was necessary, now GCUT=0.75*kmax should be enough.
+
+- 02.03pre1
+
+* Fixed a bug for BANDINFO and STOREIBZ.
+
+* Introduced the new section keyword WFPROD with the keywords MTTHR,
+MINCPW and FULLPW.
+
+* New keyword FULLPW for exact evaluation of <M' phi|phi>, where M' is 
+a biorthogonal function. (The default is still the original approximate
+evaluation.)
+
+* "IBZ" can now be used for all irreducible k points in JOB definition.
+
+* Fixed a bug in tetrahedron5_init, which occurred for 1 as the second 
+argument to FSPEC.
+
+* The maximum frequency of the W frequency mesh (freqw) is now calculated
+rather than estimated.
+
+* Instead of the number of bands, now also the maximal energy can be
+specified after NBAND. The decimal point decides how it is interpreted.
+
+* Added Manni's TDDFT routines and changes.
+
+- 02.02.1
+
+* Fixed a bug in routine dwigner. (Or actually a source of numerical 
+inaccuracy.)
+
+* Multiple jobs work properly now. (Also with RESTART and NOSTORE I hope.)
+
+* Fixed a bug in spectra.f for, e.g., PW=0.5.
+
+* The CORE definition must now be given separately for each atom type (see
+documentation).
+
+* Fixed a bug in the (P)DOS plot for keyword BANDINFO. Additionally, band 
+information is given for all (irreducible) k points now.
+
+- 02.02
+
+* Spatial symmetry is now used in the routines coulombmatrix(1) speeding
+up the calculation considerably.
+
+* Implemented integrated spectral function for Gauss integration.
+
+* Format of "spex.cou" changed. RESTART now also works in coulombmatrix1.
+
+- 02.01
+
+* Added 'symon' option to susceptibility routines for Ersoy.
+
+* Fixed a bug in correlation: W-frequency mesh was not correctly calculated
+for oselfene=2.
+
+* Changed format of spex.cor (again). Calculations with CONTOUR and RESTART
+use the same W-frequency mesh.
+
+* Adding the character '*' to the argument of CONTINUE allows poles in the
+upper half plane.
+
+* Fixed an error in the Gamma-point correction of the Drude term in routine
+selfenergy.
+
+Version 02.00
+
+* Routines correlation and selfenergy extensively modified to evaluate the
+correlation self-energy by a direct convolution of G and W instead of a
+multiplication of their Fourier transforms to imaginary time. The previous
+algorithm (involving imaginary time) can still be used with the new keyword
+IMAGTIME in the section SENERGY. (The Drude term is treated analytically as
+far as possible.) The convolution routines were included in fourier.f, 
+because they are similar to the Fourier transforms.
+With this the code is ready for version 2.
+
+* Fixed a sign error in selfenergy.f (which occurred only for anisotropic 
+systems and low/no-symmetry k points)
+
+* Fixed a bug, which occurred with the keyword CHKPROD.
+
+- 02.00pre7
+
+* Keywords NOSTORE and RESTART can now be used simultaneously.
+
+* Optimized routine wavefproducts for keyword STOREIBZ.
+
+- 02.00pre6
+
+* Parts of coulombmatrix(1) rewritten. Needs less memory now. (Might even 
+be slightly faster.)
+
+* Introduced the keyword NOSTORE. If specified, the Coulomb matrix is not pre-
+calculated and stored in memory, but recalculated whenever it is needed. This
+saves memory but increases the computational cost somewhat.
+
+- 02.00pre5
+
+* Added the possibility of specifying the minimum Coulomb eigenvalue instead
+of the number of eigenvalues/eigenvectors, e.g. MB=1.0 (or PW=1.0). The decimal
+point distinguishes MB=1.0 from, e.g., MB=50 .
+
+* Format of file "spex.cou" was changed: data is now written in tranches of
+1 M data. (Too long records lead to consumption of too much memory with some
+compilers.)
+
+* Note: If the job needs more than 2 GB memory storage, it must run on a 64bit
+system (and the executable must be compiled with a corresponding compiler).
+
+- 02.00pre4
+
+* Replaced logical variable "contour" by "oselfene" which can take the values
+1: analytic continuation
+2: contour integration with two energies
+3: contour integration with energy mesh relative to KS energy
+4: contour integration with absolute energy mesh.
+The latter option, i.e., a mesh of absolute energies, is defined by 
+"[{...}]" in spex.inp.
+oselfene is now also stored in spex.cor instead of contour.
+
+* Compilation with "g95" led to warnings/errors which have been fixed.
+
+- 02.00pre3
+
+* Format of file "spex.cor" was changed. Now ctrafo(:,:) and coul(:) are
+stored in spex.cor.
+
+* Introduced new keyword MINCPW. If set, the cpw coefficients are modified 
+in such a way that SUM(cpw(i)**2) becomes minimal while the wave functions
+remain (nearly) unchanged. Then coefficients corresponding to large G
+become relatively small. Thus, the error arising from the inconsistency of
+overlap matrices in the IPW part of <Mphi|phi> (pointed out by Markus B.
+recently) is reduced (but not eliminated). This error led to large 
+discontinuities (up to several eV) in band structures and bad convergence wrt
+the G cutoff.
+
+* Format of file "spex.cou" was changed.
+
+* Found a shocking error in the calculation of quasiparticle energies in
+correlation.f! The energies obtained from the direct solution of the 
+quasiparticle equation were wrong for occupied states (because there was
+a bug in the calculation of the self-energy for frequencies w with
+Re w < 0 and Im w < 0).
+
+* In the diagonalization of the Coulomb matrix at k=0, the matrix is reduced
+by the already known eigenfunction to the eigenvalue zero, i.e., the constant
+function. This guarantees that the constant function is used exactly.
+Before it was obtained as an eigenfunction from LAPACK, and especially for
+large GCUT there was a sizable deviation from the constant function.
+The treatment for the CUTZERO keyword was also corrected and modified
+accordingly.
+
+- 02.00pre2
+
+* Fixed a bug in mixedbasis.f (forgot to initialize nindxm).
+
+* susceptibility.f now uses ctrafo=<M~|c> instead of <M|c>. The transformation
+<M~|c> -> <M|c> is done afterwards. This makes an inversion of the overlap
+matrix unnecessary in susceptibility.f which was unstable for a large GCUT.
+
+- 02.00pre1
+
+* Forgot to initialize arrays to zero which lead to wrong GW results for metals
+and contour integration.
+
+* selfenergy.f: The exponent in exp(-enediff*time)*weight can become positive
+while (the tetrahedron) weight is nonzero. This is because the tetrahedron
+weights for integration over occupied states can still be nonzero for states
+above the Fermi energy if the latter falls into a given tetrahedron. 
+As exp(x) grows rapidly for x>0 (faster than merely linearly), it is replaced
+by x+1 for x>0. For contour integration and metals this gives better numerics.
+
+Version 01.09
+
+* GW should work for metals now.
+
+* Corrected the intraband term of the dielectric matrix which erroneously
+contained a factor 1/3. In correlation.f there was also a wrong sign.
+
+* Fixed a bug in coulombmatrix.f which led to non-unitary irreps in
+susceptibility.inc. One of the eigenvectors of the Coulomb matrix was
+neglected.
+
+- 01.09pre2
+
+* Implemented contour integration (keyword CONTOUR). (Complementary keyword 
+CONTINUE will be introduced soon.)
+
+- 01.09pre1
+
+* Implemented the core contribution to the suceptibility and the self-
+energy (keyword CORES). (The latter is not thoroughly tested yet.)
+
+* If a spectrum is calculated, the Coulomb matrix is calculated and stored 
+only for the particular k point.
+
+Version 01.08
+
+- 01.08.3
+
+* New keyword TETRAF for "fast tetrahedron integration". Neglects
+symmetrization over tetrahedra which introduces very slight deviations.
+
+* Improved BZ integration for polarization function in the case k=0.
+This means the cases k=0 and k<>0 are treated differently. With the new
+keyword MULTDIFF one can enforce that both cases are treated in the same way:
+MULTDIFF ON : new integration scheme,
+MULTDIFF OFF: old integration scheme.
+
+* Spex now writes out the spectral function on the Hilbert frequency mesh in
+"spex.sf.NNN" where NNN is a three-digit counting number.
+
+- 01.08.2
+
+* Implemented a periodic decomposition function in exchange.f and selfenergy.f 
+similar to the one used by Massidda (ALGORITHM==3).
+
+* Fixed a bug in selfenergy.f which was introduced few weeks ago.
+
+* Fixed a bug in routines bra_trafo and ket_trafo (!) which occurred when
+there was a symmetry operation that rotated a given atom to a different 
+equivalent atom than its inverse. (A stupid error.)
+
+* Included Manni's changes for the Jump cluster.
+
+* Systems without inversion symmetry can now also be calculated with
+complex Spex. Time reversal symmetry is automatically switched off in this 
+case. (The keyword TRSOFF was removed again.)
+
+- First Release: 01.08
+
+* Combinations of spatial with time reversal symmetry for systems without
+inversion symmetry implemented.
+
+* Symmetries are now also exploited when additional k points are used 
+(KPT +=...).
+
+* The number of bands are now k-dependent: nband(:,:), instead of just a
+scalar nband. The arrays nbando(:,:), nbandu(:,:) and the constants maxbando
+and maxbandu were removed.
+
+* Array deg(:,:,:) was redefined. Array ndeg(:,:,:) was removed.
+(See getinput.f)
+
+* Data transfer between Fleur and Spex was outsourced from getinput.f into
+read_write.f. Anyone who is interested in using Spex with another FLAPW-
+DFT program just has to modify read_write.f which should be relatively 
+straightforward I hope.
+If WRTKPT is specified, a second file ("kptsymout") is written as input
+for calculating Wannier functions in Fleur.
+
+* Routine structureconstant completely rewritten.
+Important! The keyword RADIUS was removed. Instead, the corresponding cutoff
+radii are determined during the program run. The keyword LAMBDA was changed to
+SCALE which is more self-explanatory. ("SCALE 2" should be a good choice.)
+
+* Fixed numerical instabilites for large G vectors in the functions
+sphbessel and sphbessel_integral. The error "Residual/Negative eigenvalue."
+can still occur for large GCUT due to numerical rounding errors in the LAPACK
+routine. In this case you can try the new keyword CUTZERO. 
+
+* As we seem to have agreed on the name "Spex", all names are now changed
+accordingly: spex (executable), spex.inp, spex.f spex.cou, spex.cor etc.
+
+* Important! The array cpw is now allocated differently:
+cpw(:nband,:nkpt,:ngpt,:nspin) instead of originally
+cpw(:ngpt,:nband,:nkpt,:nspin).
+
+* Routine wavefproducts.inc completely rewritten. It is now faster.
+
+* Point symmetries are now exploited in the calculation of the self-energy.
+This speeds up the code very much.
+
+---------------
+
+Version 01.07
+
+* Fixed a bug in wavefproducts2 that was introduced a few weeks ago by a 
+careless change of the routine and occurred if the calculation was divided 
+into packets of unoccupied states. Manfred reported this.
+
+* Some tests with -ftrapuv and -fpe0 (ifort). With ifort10 there was a 
+"floating invalid" error in a lapack routine (DLAMC2). With ifort (local) 
+there was a "floating invalid" in getinput and mixedbasis. Both were actually
+no errors but could be fixed anyway.
+
+* Fixed a bug in routine symmetrize which led to errors if a parent atom 
+followed an equivalent atom. Ersoy reported such a case. 
+
+* Quantities at symmetry-equivalent k points are now identical (with GAUSS,
+similar with the tetrahedron method). Calculations for Si with and without
+inversion symmetry give identical results now.
+
+Notes:
+
+* "Memory accumulation" is caused by the use of "cycle" (or "goto") in 
+wavefproducts.inc (PW part) for dense k-point sets. Seems to be a problem 
+of the Intel compiler (V9.0), because there is no such problem with g95. 
+If "cycle" is avoided (e.g. using a logical variable), it does not occur.

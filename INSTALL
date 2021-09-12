@@ -1,0 +1,112 @@
+Instructions for the Compilation of Spex
+----------------------------------------
+
+
+The Spex code requires the following libraries to be installed on your system: 
+LAPACK, BLAS, FFTW3, HDF5, and Wannier90 if the code is to be compiled with 
+Wannier90 support. For the parallel version you need an MPI-3 compiler.
+
+After unpacking the tar file with
+
+$ tar xvzf spexVERSION.tgz
+$ cd spexVERSION
+
+the installation of Spex executables is done in three steps: configuration
+(./configure script), compilation (make), and installation (make install).
+Installation is optional.
+
+
+(1) Configuration
+
+Configuration is done with the configure script:
+
+$ ./configure [OPTIONS]
+
+The configure script provides a number of options to customize the build
+process. The most important are
+--enable-mpi          : Compile MPI parallel version (requires an MPI-3 compiler)
+--enable-load         : Load wavefunctions from harddisc instead of keeping them in memory (experimental)
+--with-fc=COMP        : Compile with (MPI) Fortran compiler COMP
+--with-wan            : Build with Wannier90 support
+--with-wan=DIR        : DIR is the location of libwannier.a if it is not in a standard directory
+--with-dft=PROG       : By default, the interface to Fleur MaX Release 5.1 version 34 is compiled.
+                        An interface to a different DFT code can be chosen with PROG being the 
+                        code's name: 
+                        --with-dft=fleur   prepares usage with FLEUR v0.26b (2019.03)
+                        --with-dft=fleurR3     -- " --         FLEUR MaX Release 3 v0.27
+                        --with-dft=fleurR5     -- " --         FLEUR MaX Release 5 version 33
+                        --with-dft=fleurR5.1   -- " --         FLEUR MaX Release 5.1 version 34
+--with-hdf5=DIR       : Root directory of HDF5 (must contain DIR/lib and DIR/include)
+--with-libdir=DIR     : Extra directory(-ies) to search for libraries
+--with-includedir=DIR : Extra directory(-ies) to search for include files
+--prefix=PREF         : Installation directory (default is /usr/local)
+                        (installation is optional)
+
+After --with-libdir and --with-includedir, multiple directories can be specified by a quoted
+space-separated list, e.g., --with-libdir="/usr/lib /usr/local/lib".
+
+For fine tuning, the following environment variables can be defined before running configure
+(or in one line: $ ./configure FC=gfortran).
+FC      : Fortran compiler
+MPIFC   : MPI Fortran compiler
+FCFLAGS : Compiler flags
+LDFLAGS : Linker flags
+LDLIBS  : Additional libraries (-l<lib>)
+
+Type
+$ ./configure --help
+for a full list.
+
+The configure script tries to create a Makefile, with which Spex can
+be compiled successfully but which is not necessarily an optimal Makefile. 
+
+For example, make sure that the optimization level is set properly.
+The configure script tries several options (-O, -O1, -O2), which are used
+by most compilers. If this fails, the code might be compiled without
+optimization, which may lead to very slow execution. 
+
+Also, the libraries found by the configure script might not be optimal for 
+efficiency.
+
+
+(2) Compilation and installation
+
+After successful configuration you can compile the Spex code with
+
+$ make
+
+The compilation creates the executables 
+src/spex.inv   - for systems with inversion symmetry and without spin-orbit coupling,
+src/spex.noinv - for systems without inversion symmetry or with spin-orbit coupling,
+src/spex.extr  - data extraction utility.
+
+The Spex launcher script (sh/spex and src/spex) simplifies running a Spex calculation.
+The script either executes "spex.inv" or "spex.noinv" depending on the DFT data.
+
+The executables (including the shell scripts of the sh directory) can be installed 
+into PREF/bin [see option --prefix in (1)] with
+
+$ make install
+
+If the directory PREF/bin is in the PATH environment variable, Spex is run simply
+with "spex".
+
+
+(3) Upgrading
+
+To upgrade to the latest version, run
+
+$ ./upgrade
+
+The "upgrade" script downloads, configures, and compiles the new source automatically.
+One can also check if a new version is available with
+
+$ ./upgrade --check
+
+See the documentation (doc/spex.pdf or online http://spex.readthedocs.org) for details.
+
+
+Cite the Spex code as
+Christoph Friedrich, Stefan Blügel, Arno Schindlmayr
+Efficient implementation of the GW approximation within the all-electron FLAPW method
+Phys. Rev. B 81, 125102 (2010)

@@ -1,0 +1,12 @@
+# include "cppmacro.h"
+      interface
+      subroutine define_freq(job1,contour_par,freqc,nfreqc,lwrite)
+      use global !inc
+      implicit none
+      type(jobtype), intent(in)               :: job1
+      integer,       intent(out)              :: nfreqc
+      complex_dp,    intent(out), allocatable :: freqc(:)
+      real_dp,       intent(out)              :: contour_par(4)
+      logical,       intent(in)               :: lwrite
+      end subroutine define_freq
+      end interface

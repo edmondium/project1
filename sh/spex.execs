@@ -1,0 +1,139 @@
+# Sets executables and some basic parameters
+# (sourced by spex.band and spex.selfc)
+#
+# If "copy" is set, the executables are copied to the local directory.
+# To interface with other DFT code: check for "#DFT" comments.
+
+#########
+
+# (1) Spex
+
+# (1.1) Default Spex executable
+
+if [ ! "$SPEX_EXEC" ]; then
+  SPEX_EXEC=`command -v spex 2> /dev/null`
+  if [ ! "$SPEX_EXEC" ]; then
+    echo 'Environment variable SPEX_EXEC unset and "spex" not found.' > /dev/stderr
+    exit 1
+  fi
+fi
+
+# (1.2) Separate executable from command line arguments
+
+SPEX_EXE=$(expr "$SPEX_EXEC" : '\([^ ]*\)')
+SPEX_CMD=$(expr "$SPEX_EXEC" : '.* \(.*\)')
+command -v $SPEX_EXE >/dev/null 2>&1 || { echo "$SPEX_EXE not found or not an executable." > /dev/stderr ; exit 1; }
+
+
+# (2) DFT code
+
+# (2.1) Determine DFT interface
+
+name=`$SPEX_EXE -x | grep "DFT"`
+
+if [ $? != 0 ]; then
+  {
+  echo
+  echo "Spex executable failed: $SPEX_EXEC" 
+  } >> /dev/stderr
+  exit 1
+fi
+
+dft=`expr "$name" : '.*short="\([^"]*\)"'`
+dftlong=`expr "$name" : '.*long="\([^"]*\)"'`
+
+if [ ! "$dft" ]; then
+  {
+  echo
+  echo "Spex (-x) could not determine DFT interface. Please check."
+  exit 1
+  } >> /dev/stderr
+fi
+
+if [ ${dft::5} = "fleur" ]; then
+  echo "DFT code: $dftlong"
+#
+#DFT elif [ $dft = "some_other_code" ]; then
+#DFT   echo "Shell script does not work with this DFT code: $dftlong" > /dev/stderr
+#DFT   exit 1
+#DFT   ...
+#
+else
+  echo "DFT code unknown: $dftlong" > /dev/stderr
+  exit 1
+fi
+
+# (2.2) Default DFT executables
+
+if [ ! "$DFT_EXEC" ]; then
+
+  if [ $dft = "fleur" ]; then  
+    DFT_EXEC=`command -v fleur 2> /dev/null`
+    if [ ! "$DFT_EXEC" ]; then
+      echo 'Environment variable DFT_EXEC unset and "fleur" not found.' >> /dev/stderr
+      exit 1
+    fi
+  elif [ ${dft::5} = "fleur" ]; then
+    DFT_EXEC=`command -v fleur 2> /dev/null`
+    if [ ! "$DFT_EXEC" ]; then
+      DFT_EXEC=`command -v fleur_MPI 2> /dev/null`
+      if [ ! "$DFT_EXEC" ]; then
+        echo 'Environment variable DFT_EXEC unset and "fleur" ("fleur_MPI") not found.' >> /dev/stderr
+        exit 1
+      fi
+    fi
+
+#DFT  elif [ $dft = "some_other_code" ]; then
+#DFT    ...
+
+  fi
+elif [ "$DFT_EXEC" != "(not needed)" ]; then
+  [ -x "$DFT_EXEC" ] || { echo "$DFT_EXEC not found or not an executable."; exit 1; }
+fi
+
+
+# (3) Prepended command
+
+[ "$THRU" ] || THRU=''
+
+if [ ! "$SPEX_THRU" ]; then
+  [ "$THRU" ] && SPEX_THRU=$THRU
+fi
+if [ ! "$DFT_THRU" ]; then
+  [ "$THRU" ] && DFT_THRU=$THRU
+fi
+
+
+# (4) Output
+
+echo Executables:
+echo 'DFT  = '$DFT_THRU' '$DFT_EXEC
+echo 'SPEX = '$SPEX_THRU' '$SPEX_EXEC
+
+[ "$DFT_EXEC" = "(not needed)" ] && DFT_EXEC=''
+
+# (5) Copy if "copy" is set (-c on command line)
+
+if [ "$copy" ]; then
+  SPEX_EXEC_FILE=$(command -v "$SPEX_EXEC")
+  if [ ! -f "$SPEX_EXEC_FILE" ]; then
+    echo "$SPEX_EXEC_FILE is not a file; cannot copy." >> /dev/stderr
+  else
+    FIRSTLINE="$(head -1 $SPEX_EXEC_FILE &> /dev/null)"
+    if [ "${FIRSTLINE::7}" = '#!/bin/' ]; then
+      echo "$SPEX_EXEC_FILE is a shell script. Only executables can be copied." >> /dev/stderr
+    else
+      cp $SPEX_EXEC_FILE spex_exec
+      SPEX_EXEC="./spex_exec $SPEX_CMD"
+    fi
+  fi
+  if [ "$DFT_EXEC" ]; then
+    DFT_EXEC_FILE=$(command -v "$DFT_EXEC")
+    if [ ! -f "$DFT_EXEC_FILE" ]; then
+      echo "$DFT_EXEC_FILE is not a file; cannot copy." >> /dev/stderr
+    else
+      cp $DFT_EXEC_FILE dft_exec
+      DFT_EXEC="./dft_exec"
+    fi
+  fi
+fi
